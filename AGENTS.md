@@ -8,3 +8,8 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+
+- Coding conversations use route-derived thread IDs and owner-scoped Cloud records containing AI SDK UIMessage arrays, so history remains isolated and reloadable.
+- Chat streams through the TanStack API route and server-only Responses helper; credentials and workspace prompts never enter client code.
+- Account controls use Cloud Auth and its managed social broker; workspace identity must reflect the active session.
+- Workbench and Monaco themes share global semantic CSS tokens, with the resolved system preference supplied by the IDE state.

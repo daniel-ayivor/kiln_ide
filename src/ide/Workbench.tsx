@@ -9,6 +9,8 @@ import { EditorArea } from "./components/EditorArea";
 import { BottomPanel } from "./components/BottomPanel";
 import { TopBar, StatusBar, CommandPalette, ConfirmDialog } from "./components/Chrome";
 import { ContextMenuLayer, Resizer } from "./components/common";
+import { AccountProvider } from "./auth";
+import { ChatPanel } from "./components/ChatPanel";
 
 function useShortcuts() {
   const ide = useIde();
@@ -51,13 +53,14 @@ function useShortcuts() {
   }, []);
 }
 
-function Shell() {
+function Shell({ conversationId }: { conversationId?: string }) {
   const ide = useIde();
   useShortcuts();
   const [sidebarW, setSidebarW] = useState(260);
   const [panelH, setPanelH] = useState(240);
   const [maxPanel, setMaxPanel] = useState(false);
   const mainRef = useRef<HTMLDivElement>(null);
+  const [chatOpen, setChatOpen] = useState(!!conversationId);
 
   const View = {
     explorer: Explorer,
@@ -71,7 +74,7 @@ function Shell() {
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-background text-foreground" onContextMenu={(e) => e.preventDefault()}>
       <TopBar />
       <div className="flex min-h-0 flex-1">
-        <ActivityBar />
+        <ActivityBar chatOpen={chatOpen} onChat={() => setChatOpen(v => !v)} />
         {ide.sidebarOpen && (
           <>
             <aside className="shrink-0 overflow-hidden border-r bg-sidebar text-sidebar-foreground" style={{ width: sidebarW }}>
@@ -98,6 +101,7 @@ function Shell() {
             </>
           )}
         </div>
+        {chatOpen && <ChatPanel conversationId={conversationId} onClose={() => setChatOpen(false)} />}
       </div>
       <StatusBar />
       <CommandPalette />
@@ -107,11 +111,11 @@ function Shell() {
   );
 }
 
-export function Workbench() {
+export function Workbench({ conversationId }: { conversationId?: string }) {
   return (
     <IdeProvider>
       <TooltipProvider>
-        <Shell />
+        <AccountProvider><Shell conversationId={conversationId} /></AccountProvider>
       </TooltipProvider>
     </IdeProvider>
   );
