@@ -67,16 +67,13 @@ function useIdeState() {
     null,
   );
   const [branch] = useState("main");
+  const [selection, setSelection] = useState<{ fileId: string; text: string } | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatDraft, setChatDraft] = useState<{ file: string; language: string; code: string; n: number } | null>(null);
+  const [chatThreads, setChatThreads] = useState<{ id: string; title: string; messages: import("ai").UIMessage[] }[]>([]);
 
-  // persist settings
+  // settings live in memory only (dummy workspace)
   useEffect(() => {
-    try {
-      const s = localStorage.getItem("kiln-settings");
-      if (s) setSettings({ ...defaultSettings, ...JSON.parse(s) });
-    } catch {}
-  }, []);
-  useEffect(() => {
-    localStorage.setItem("kiln-settings", JSON.stringify(settings));
     document.documentElement.classList.toggle("dark", settings.theme === "dark");
   }, [settings]);
 
@@ -303,7 +300,7 @@ function useIdeState() {
     sidebarView, sidebarOpen, setSidebarOpen, panelOpen, setPanelOpen, panelView, settings,
     setSettings, palette, setPalette, cursor, setCursor, problems, setProblems, output, log,
     menu, setMenu, renaming, setRenaming, reveal, setReveal, debugging, setDebugging, confirm,
-    setConfirm, branch, dirty, changes, committed,
+    setConfirm, branch, dirty, selection, setSelection, chatOpen, setChatOpen, chatDraft, setChatDraft, chatThreads, setChatThreads, changes, committed,
     openFile, closeTab, closeOthers, closeAll, splitRight, updateContent, save, saveAll,
     createNode, renameNode, deleteNode, commit, toggleFolder, showView, showPanel,
   };

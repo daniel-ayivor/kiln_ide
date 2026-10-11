@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { setActiveEditor, askAboutSelection } from "../editorBridge";
 import Editor, { type Monaco, type OnMount } from "@monaco-editor/react";
 import { X, Columns2, MoreHorizontal, ChevronRight, Settings as SettingsIcon, Loader2 } from "lucide-react";
 import { useIde } from "../store";
@@ -213,6 +214,18 @@ function CodeEditor({ id, gi }: { id: string; gi: number }) {
 
   const onMount: OnMount = (editor, monaco) => {
     editorRef.current = editor;
+    setActiveEditor(editor);
+    editor.onDidFocusEditorText(() => setActiveEditor(editor));
+    editor.onDidChangeCursorSelection(() => {
+      const sel = editor.getSelection();
+      const text = sel ? editor.getModel()?.getValueInRange(sel) ?? "" : "";
+      ideRef.current.setSelection(text.trim() ? { fileId: id, text } : null);
+    });
+    editor.addAction({
+      id: "kiln.askAi", label: "Ask Kiln About Selection", contextMenuGroupId: "navigation", contextMenuOrder: 0,
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyI],
+      run: () => askAboutSelection(ideRef.current),
+    });
     editor.onDidChangeCursorPosition((e) => {
       ideRef.current.setCursor({ line: e.position.lineNumber, column: e.position.column });
     });
