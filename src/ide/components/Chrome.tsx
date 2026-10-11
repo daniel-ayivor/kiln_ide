@@ -30,13 +30,14 @@ export function TopBar() {
   const cmds = getCommands(ide);
   const by = (id: string) => cmds.find((c) => c.id === id)!;
   const menus: Record<string, (string | null)[]> = {
-    File: ["file.new", "file.newFolder", null, "file.quickOpen", null, "file.save", "file.saveAll", null, "settings.open"],
-    Edit: ["editor.wrap", "zoom.in", "zoom.out"],
-    View: ["view.explorer", "view.search", "view.scm", "view.run", "view.extensions", null, "view.sidebar", "view.panel", "view.problems", "view.output", null, "theme.toggle", "editor.minimap"],
-    Go: ["file.quickOpen"],
-    Run: ["debug.start", "debug.stop"],
-    Terminal: ["view.terminal"],
-    Help: [],
+    File: ["file.new", "file.newFolder", "file.newWindow", null, "file.open", "file.openFolder", "file.openRecent", null, "file.save", "file.saveAs", "file.saveAll", null, "file.autoSave", "settings.open", null, "file.revert", "editor.close", "file.closeFolder", null, "file.exit"],
+    Edit: ["edit.undo", "edit.redo", null, "edit.cut", "edit.copy", "edit.paste", null, "edit.find", "edit.replace", null, "edit.findInFiles", "edit.replaceInFiles", null, "edit.comment", "edit.blockComment", "edit.format"],
+    Selection: ["sel.all", "sel.expand", "sel.shrink", null, "sel.copyUp", "sel.copyDown", "sel.moveUp", "sel.moveDown", "sel.duplicate", null, "sel.cursorAbove", "sel.cursorBelow", "sel.nextOccurrence", "sel.allOccurrences", null, "ai.explainSelection"],
+    View: ["view.commandPalette", null, "view.explorer", "view.search", "view.scm", "view.run", "view.extensions", "view.chat", null, "view.problems", "view.output", "view.debugConsole", "view.terminal", null, "view.sidebar", "view.panel", "editor.split", null, "editor.wrap", "editor.minimap", "zoom.in", "zoom.out", "theme.toggle"],
+    Go: ["go.back", "go.forward", null, "file.quickOpen", "go.symbol", "go.definition", "go.references", "go.line", "go.bracket", null, "go.nextProblem", "go.prevProblem"],
+    Run: ["debug.start", "debug.runNoDebug", "debug.stop", "debug.restart", null, "debug.addConfig", null, "debug.breakpoint"],
+    Terminal: ["term.new", "term.split", null, "term.runTask", "term.buildTask", null, "term.configure"],
+    Help: ["help.welcome", "view.commandPalette", "help.docs", "help.tips", null, "help.shortcuts", null, "help.issue", "help.updates", null, "help.about"],
   };
   return (
     <header className="grid h-9 shrink-0 select-none grid-cols-[1fr_minmax(0,480px)_1fr] items-center gap-2 border-b bg-ide-titlebar px-2">
@@ -49,8 +50,7 @@ export function TopBar() {
                 {name}
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="min-w-[240px]">
-                {ids.length === 0 && <DropdownMenuItem onClick={() => ide.setPalette("commands")}>Show All Commands<DropdownMenuShortcut>Ctrl+Shift+P</DropdownMenuShortcut></DropdownMenuItem>}
-                {ids.map((id, i) =>
+                                {ids.map((id, i) =>
                   id === null ? (
                     <DropdownMenuSeparator key={i} />
                   ) : (

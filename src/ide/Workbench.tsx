@@ -46,21 +46,22 @@ function useShortcuts() {
       if (k === "\\") return run("editor.split");
       if (k === ",") return run("settings.open");
       if (k === "w") return run("editor.close");
-      if (k === "n" && e.altKey) return run("file.new");
+      if (k === "n") return run("file.new");
+      if (k === "i") return run("ai.explainSelection");
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
   }, []);
 }
 
-function Shell({ conversationId }: { conversationId?: string }) {
+function Shell() {
   const ide = useIde();
   useShortcuts();
   const [sidebarW, setSidebarW] = useState(260);
   const [panelH, setPanelH] = useState(240);
   const [maxPanel, setMaxPanel] = useState(false);
   const mainRef = useRef<HTMLDivElement>(null);
-  const [chatOpen, setChatOpen] = useState(!!conversationId);
+  const { chatOpen, setChatOpen } = ide;
 
   const View = {
     explorer: Explorer,
@@ -101,7 +102,7 @@ function Shell({ conversationId }: { conversationId?: string }) {
             </>
           )}
         </div>
-        {chatOpen && <ChatPanel conversationId={conversationId} onClose={() => setChatOpen(false)} />}
+        {chatOpen && <ChatPanel onClose={() => setChatOpen(false)} />}
       </div>
       <StatusBar />
       <CommandPalette />
@@ -111,11 +112,11 @@ function Shell({ conversationId }: { conversationId?: string }) {
   );
 }
 
-export function Workbench({ conversationId }: { conversationId?: string }) {
+export function Workbench() {
   return (
     <IdeProvider>
       <TooltipProvider>
-        <AccountProvider><Shell conversationId={conversationId} /></AccountProvider>
+        <AccountProvider><Shell /></AccountProvider>
       </TooltipProvider>
     </IdeProvider>
   );
