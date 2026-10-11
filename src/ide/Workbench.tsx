@@ -48,8 +48,6 @@ function useShortcuts() {
       if (k === "w") return run("editor.close");
       if (k === "n") return run("file.new");
       if (k === "i") return run("ai.explainSelection");
-      if (k === "z") return run("edit.undo");
-      if (k === "y") return run("edit.redo");
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
