@@ -22,7 +22,7 @@ export function runEditorAction(actionId: string) {
 }
 
 export async function pasteIntoEditor() {
-  if (!active) return toast("Open a file to paste");
+  if (!active) { toast("Open a file to paste"); return; }
   try {
     const text = await navigator.clipboard.readText();
     active.focus();
