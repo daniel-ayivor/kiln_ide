@@ -3,14 +3,15 @@ import type { Ide } from "./store";
 import { SETTINGS_TAB } from "./types";
 import { runEditorAction, pasteIntoEditor, askAboutSelection } from "./editorBridge";
 
-export type Command = { id: string; label: string; shortcut?: string; run: () => void };
+export type Command = { id: string; label: string; shortcut?: string; run: () => void; checked?: boolean; disabled?: boolean };
 
 const demo = (what: string) => () => toast(`${what}`, { description: "This is a demo workspace — nothing is saved." });
 
 export function getCommands(ide: Ide): Command[] {
   const g = ide.groups[ide.activeGroup];
   const ed = (id: string) => () => runEditorAction(id);
-  return [
+  const hasFile = !!g?.active && g.active !== SETTINGS_TAB;
+  const list: Command[] = [
     // File
     { id: "file.new", label: "File: New Text File", shortcut: "Ctrl+N", run: () => ide.createNode(ide.selected ?? "root", "file") },
     { id: "file.newFolder", label: "File: New Folder", run: () => ide.createNode(ide.selected ?? "root", "folder") },
@@ -109,4 +110,16 @@ export function getCommands(ide: Ide): Command[] {
     { id: "help.updates", label: "Help: Check for Updates…", run: demo("Kiln is up to date") },
     { id: "help.about", label: "Help: About", run: demo("Kiln 1.0 — demo build") },
   ];
+  const needFile = /^(edit\.(undo|redo|cut|copy|paste|find|replace|comment|blockComment|format)|sel\.|go\.(back|forward|symbol|definition|references|line|bracket|nextProblem|prevProblem)|file\.(save|saveAs|revert)$|editor\.(close|split|closeAll)|ai\.explainSelection|debug\.breakpoint)/;
+  const checks: Record<string, boolean> = {
+    "file.autoSave": !!ide.settings.autoSave, "editor.wrap": !!ide.settings.wordWrap, "editor.minimap": !!ide.settings.minimap,
+    "view.sidebar": ide.sidebarOpen, "view.panel": ide.panelOpen, "view.chat": ide.chatOpen,
+    "view.terminal": ide.panelOpen && ide.panelView === "terminal",
+  };
+  return list.map((c) => ({
+    ...c,
+    label: c.id === "file.autoSave" ? "File: Auto Save" : c.label,
+    checked: c.id in checks ? checks[c.id] : undefined,
+    disabled: (needFile.test(c.id) && !hasFile) || (c.id === "file.saveAll" && !ide.dirty.size) || (c.id === "debug.start" || c.id === "debug.runNoDebug" ? ide.debugging : c.id === "debug.stop" || c.id === "debug.restart" ? !ide.debugging : false),
+  }));
 }

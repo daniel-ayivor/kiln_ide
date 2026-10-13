@@ -54,7 +54,8 @@ export function TopBar() {
                   id === null ? (
                     <DropdownMenuSeparator key={i} />
                   ) : (
-                    <DropdownMenuItem key={id} onClick={() => by(id).run()} className="text-[12.5px]">
+                    <DropdownMenuItem key={id} disabled={by(id).disabled} onClick={() => by(id).run()} className="text-[12.5px]">
+                      <span className="flex w-4 justify-center">{by(id).checked && <Check className="h-3.5 w-3.5" />}</span>
                       {by(id).label.replace(/^[^:]+: /, "")}
                       {by(id).shortcut && <DropdownMenuShortcut>{by(id).shortcut}</DropdownMenuShortcut>}
                     </DropdownMenuItem>
@@ -164,6 +165,7 @@ export function CommandPalette() {
     if (!mode) return [];
     if (isCmd)
       return getCommands(ide)
+        .filter((c) => !c.disabled)
         .map((c) => ({ key: c.id, label: c.label, hint: c.shortcut, run: c.run, score: fuzzy(c.label, term), file: undefined as string | undefined }))
         .filter((c) => c.score > 0)
         .sort((a, b) => b.score - a.score);
