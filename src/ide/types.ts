@@ -14,7 +14,7 @@ export const SETTINGS_TAB = "__settings__";
 export type EditorGroup = { id: string; tabs: string[]; active: string | null };
 
 export type Settings = {
-  theme: "dark" | "light";
+  theme: "dark" | "light" | "hc-dark" | "hc-light" | "system";
   fontSize: number;
   tabSize: number;
   wordWrap: boolean;
