@@ -72,10 +72,35 @@ function useIdeState() {
   const [chatDraft, setChatDraft] = useState<{ file: string; language: string; code: string; n: number } | null>(null);
   const [chatThreads, setChatThreads] = useState<{ id: string; title: string; messages: import("ai").UIMessage[] }[]>([]);
 
-  // settings live in memory only (dummy workspace)
+  // theme: persisted in the browser, "system" follows the OS preference
   useEffect(() => {
-    document.documentElement.classList.toggle("dark", settings.theme === "dark");
-  }, [settings]);
+    try {
+      const stored = localStorage.getItem("kiln.theme");
+      if (stored === "dark" || stored === "light" || stored === "hc-dark" || stored === "hc-light" || stored === "system") {
+        setSettings((s) => (s.theme === stored ? s : { ...s, theme: stored }));
+      }
+    } catch {
+      /* storage unavailable */
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("kiln.theme", settings.theme);
+    } catch {
+      /* storage unavailable */
+    }
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const apply = () => {
+      const resolved = settings.theme === "system" ? (media.matches ? "dark" : "light") : settings.theme;
+      const el = document.documentElement;
+      el.classList.toggle("dark", resolved === "dark" || resolved === "hc-dark");
+      el.classList.toggle("hc", resolved === "hc-dark" || resolved === "hc-light");
+    };
+    apply();
+    media.addEventListener("change", apply);
+    return () => media.removeEventListener("change", apply);
+  }, [settings.theme]);
 
   const log = useCallback((line: string, channel = "Kiln") => {
     setOutput((o) => [...o, { channel, line, time: new Date().toLocaleTimeString() }]);
