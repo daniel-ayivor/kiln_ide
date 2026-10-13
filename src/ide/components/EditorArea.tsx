@@ -301,7 +301,13 @@ function CodeEditor({ id, gi }: { id: string; gi: number }) {
       path={id}
       language={languageFor(node.name)}
       value={node.content ?? ""}
-      theme={ide.settings.theme === "dark" ? "kiln-dark" : "kiln-light"}
+      theme={(() => {
+        const t = ide.settings.theme;
+        if (t === "hc-dark") return "kiln-hc-dark";
+        if (t === "hc-light") return "kiln-hc-light";
+        const dark = t === "dark" || (t === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        return dark ? "kiln-dark" : "kiln-light";
+      })()}
       beforeMount={defineThemes}
       onMount={onMount}
       onChange={(v) => ide.updateContent(id, v ?? "")}
