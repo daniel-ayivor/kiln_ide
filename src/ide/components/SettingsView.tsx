@@ -61,6 +61,9 @@ export function SettingsView() {
                 >
                   <option value="dark">Kiln Dark</option>
                   <option value="light">Kiln Light</option>
+                  <option value="hc-dark">Kiln High Contrast Dark</option>
+                  <option value="hc-light">Kiln High Contrast Light</option>
+                  <option value="system">System Default</option>
                 </select>
               )}
             </div>

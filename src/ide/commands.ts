@@ -71,7 +71,10 @@ export function getCommands(ide: Ide): Command[] {
     { id: "view.output", label: "View: Show Output", shortcut: "Ctrl+Shift+U", run: () => ide.showPanel("output") },
     { id: "view.debugConsole", label: "View: Show Debug Console", shortcut: "Ctrl+Shift+Y", run: () => ide.showPanel("debug") },
     { id: "settings.open", label: "Preferences: Open Settings", shortcut: "Ctrl+,", run: () => ide.openFile(SETTINGS_TAB) },
-    { id: "theme.toggle", label: "Preferences: Toggle Light/Dark Theme", run: () => ide.setSettings((s) => ({ ...s, theme: s.theme === "dark" ? "light" : "dark" })) },
+    { id: "theme.toggle", label: "Preferences: Toggle Light/Dark Theme", run: () => ide.setSettings((s) => {
+      const resolved = s.theme === "system" ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light") : s.theme;
+      return { ...s, theme: resolved === "dark" ? "light" : "dark" };
+    }) },
     { id: "editor.wrap", label: "View: Toggle Word Wrap", shortcut: "Alt+Z", run: () => ide.setSettings((s) => ({ ...s, wordWrap: !s.wordWrap })) },
     { id: "editor.minimap", label: "View: Toggle Minimap", run: () => ide.setSettings((s) => ({ ...s, minimap: !s.minimap })) },
     { id: "zoom.in", label: "View: Zoom In", shortcut: "Ctrl+=", run: () => ide.setSettings((s) => ({ ...s, fontSize: Math.min(28, s.fontSize + 1) })) },

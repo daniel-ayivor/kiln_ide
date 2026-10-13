@@ -57,6 +57,43 @@ function defineThemes(monaco: Monaco) {
       "editor.selectionBackground": "#f2d7c0",
     },
   });
+  monaco.editor.defineTheme("kiln-hc-dark", {
+    base: "hc-black",
+    inherit: true,
+    rules: [
+      { token: "comment", foreground: "9a9186", fontStyle: "italic" },
+      { token: "keyword", foreground: "ffb86b" },
+      { token: "string", foreground: "a8e06a" },
+      { token: "number", foreground: "ffe08a" },
+      { token: "type", foreground: "a8d4ff" },
+    ],
+    colors: {
+      "editor.background": "#0d0b09",
+      "editor.foreground": "#f4efe8",
+      "editor.lineHighlightBackground": "#1c1916",
+      "editorLineNumber.foreground": "#8a8178",
+      "editorCursor.foreground": " #ffb86b",
+      "editor.selectionBackground": "#7a4f2a",
+    },
+  });
+  monaco.editor.defineTheme("kiln-hc-light", {
+    base: "hc-light",
+    inherit: true,
+    rules: [
+      { token: "comment", foreground: "6b6257", fontStyle: "italic" },
+      { token: "keyword", foreground: "a33f0f" },
+      { token: "string", foreground: "3d6423" },
+      { token: "number", foreground: "7d5608" },
+      { token: "type", foreground: "1f4d7d" },
+    ],
+    colors: {
+      "editor.background": "#ffffff",
+      "editor.lineHighlightBackground": "#eceae4",
+      "editorLineNumber.foreground": "#8a8178",
+      "editorCursor.foreground": "#a33f0f",
+      "editor.selectionBackground": "#e8c9a8",
+    },
+  });
   monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
     jsx: monaco.languages.typescript.JsxEmit.ReactJSX,
     target: monaco.languages.typescript.ScriptTarget.ES2020,
