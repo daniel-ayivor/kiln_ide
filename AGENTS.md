@@ -13,3 +13,4 @@
 - Chat streams through the TanStack API route and server-only Responses helper; credentials and workspace prompts never enter client code.
 - Account controls use Cloud Auth and its managed social broker; workspace identity must reflect the active session.
 - Workbench and Monaco themes share global semantic CSS tokens, with the resolved system preference supplied by the IDE state.
+- All OS access (workspace files, terminal) goes through getPlatform() in src/ide/platform; components never import mockFs for I/O. Why: an Electron preload can inject window.kilnBridge without UI rewrites.

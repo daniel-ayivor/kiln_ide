@@ -7,7 +7,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { createMockFs, pathOf } from "./mockFs";
+import { pathOf } from "./mockFs";
+import { getPlatform } from "./platform";
 import type {
   EditorGroup,
   FsNode,
@@ -31,10 +32,11 @@ const defaultSettings: Settings = {
 type Output = { channel: string; line: string; time: string };
 
 function useIdeState() {
-  const [nodes, setNodes] = useState<Record<string, FsNode>>(createMockFs);
+  const [initial] = useState(() => getPlatform().fs.loadWorkspace());
+  const [nodes, setNodes] = useState<Record<string, FsNode>>(initial);
   const [saved, setSaved] = useState<Record<string, string>>(() =>
     Object.fromEntries(
-      Object.values(createMockFs())
+      Object.values(initial)
         .filter((n) => n.type === "file")
         .map((n) => [n.id, n.content ?? ""]),
     ),

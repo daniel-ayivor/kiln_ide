@@ -2,11 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { X, Plus, Trash2, ChevronUp, ChevronDown, CircleX, TriangleAlert, Info, SquareTerminal, CheckCircle2 } from "lucide-react";
 import { useIde } from "../store";
 import type { PanelView } from "../types";
-import { childrenOf } from "../mockFs";
+import { getPlatform, type TermLine as Line } from "../platform";
 import { EmptyState } from "./common";
 import { cn } from "@/lib/utils";
-
-type Line = { kind: "in" | "out" | "err" | "ok"; text: string };
 type Term = { id: number; name: string; lines: Line[]; cwd: string };
 
 const banner: Line[] = [{ kind: "out", text: "Kiln integrated terminal — type 'help' for available commands." }];
@@ -23,84 +21,16 @@ function Terminal({ term, onUpdate }: { term: Term; onUpdate: (t: Term) => void 
   }, [term.lines.length]);
 
   const run = (cmdline: string) => {
-    const [cmd, ...args] = cmdline.trim().split(/\s+/);
-    const out: Line[] = [{ kind: "in", text: cmdline }];
-    const push = (text: string, kind: Line["kind"] = "out") => out.push({ kind, text });
-    const resolve = (p: string) => {
-      const base = term.cwd === "~" ? "" : term.cwd;
-      return [base, p].filter(Boolean).join("/").replace(/^\/+/, "");
-    };
-    switch (cmd) {
-      case undefined:
-      case "":
-        break;
-      case "help":
-        push("Commands: ls, cd <dir>, cat <file>, pwd, echo, date, clear, git status, npm run dev, npm test, touch <file>");
-        break;
-      case "clear":
-        onUpdate({ ...term, lines: [] });
-        return;
-      case "pwd":
-        push(`/workspace/kiln-starter${term.cwd === "~" ? "" : "/" + term.cwd}`);
-        break;
-      case "ls": {
-        const dir = args[0] ? resolve(args[0]) : term.cwd === "~" ? "root" : term.cwd;
-        const kids = childrenOf(ide.nodes, dir || "root");
-        if (!ide.nodes[dir || "root"]) push(`ls: ${args[0]}: No such directory`, "err");
-        else push(kids.map((k) => (k.type === "folder" ? k.name + "/" : k.name)).join("   "));
-        break;
-      }
-      case "cd": {
-        if (!args[0] || args[0] === "~" || args[0] === "/") { onUpdate({ ...term, cwd: "~", lines: [...term.lines, ...out] }); return; }
-        if (args[0] === "..") {
-          const up = term.cwd.split("/").slice(0, -1).join("/") || "~";
-          onUpdate({ ...term, cwd: up, lines: [...term.lines, ...out] });
-          return;
-        }
-        const target = resolve(args[0]);
-        if (ide.nodes[target]?.type === "folder") { onUpdate({ ...term, cwd: target, lines: [...term.lines, ...out] }); return; }
-        push(`cd: no such directory: ${args[0]}`, "err");
-        break;
-      }
-      case "cat": {
-        const f = ide.nodes[resolve(args[0] ?? "")];
-        if (f?.type === "file") (f.content ?? "").split("\n").forEach((l) => push(l));
-        else push(`cat: ${args[0] ?? ""}: No such file`, "err");
-        break;
-      }
-      case "touch":
-        if (args[0]) { ide.createNode(term.cwd === "~" ? "root" : term.cwd, "file"); push("Created new file — rename it in the explorer."); }
-        break;
-      case "echo":
-        push(args.join(" "));
-        break;
-      case "date":
-        push(new Date().toString());
-        break;
-      case "git":
-        if (args[0] === "status") {
-          push(`On branch ${ide.branch}`);
-          if (!ide.changes.length) push("nothing to commit, working tree clean");
-          ide.changes.forEach((c) => push(`  ${c.status === "U" ? "new file:" : c.status === "D" ? "deleted: " : "modified:"}   ${c.id}`, c.status === "U" ? "ok" : "err"));
-        } else push(`git: '${args[0] ?? ""}' is not supported in this sandbox`, "err");
-        break;
-      case "npm":
-        if (args[0] === "run" && args[1] === "dev") {
-          push("> kiln-starter@0.1.0 dev");
-          push("> vite");
-          push("");
-          push("  VITE v7.0.0  ready in 312 ms", "ok");
-          push("  ➜  Local:   http://localhost:5173/");
-          ide.log("Dev server started on :5173", "Tasks");
-        } else if (args[0] === "test") {
-          push(" ✓ src/utils/format.test.ts (3 tests) 4ms", "ok");
-          push(" Test Files  1 passed (1)", "ok");
-        } else push(`npm: unknown command '${args.join(" ")}'`, "err");
-        break;
-      default:
-        push(`${cmd}: command not found`, "err");
-    }
-    onUpdate({ ...term, lines: [...term.lines, ...out] });
+    const r = getPlatform().shell.exec(cmdline, {
+      cwd: term.cwd,
+      nodes: ide.nodes,
+      branch: ide.branch,
+      changes: ide.changes,
+      createNode: ide.createNode,
+      log: ide.log,
+    });
+    if (r.clear) return onUpdate({ ...term, lines: [] });
+    onUpdate({ ...term, cwd: r.cwd ?? term.cwd, lines: [...term.lines, ...r.lines] });
   };
 
   return (
