@@ -82,13 +82,13 @@ export function TopBar() {
           <PanelBottom className="h-4 w-4" />
         </button>
         <div className="ml-2 hidden items-center sm:flex">
-          <button title="Minimize" className="ide-icon-btn h-7 w-9" onClick={() => (getPlatform().window ? getPlatform().window!.minimize() : demo("window minimize"))}>
+          <button title="Minimize" className="ide-icon-btn h-7 w-9" onClick={() => (getPlatform().window ? getPlatform().window!.minimize() : demo("Window minimize")())}>
             <Minus className="h-3.5 w-3.5" />
           </button>
-          <button title="Maximize" className="ide-icon-btn h-7 w-9" onClick={() => (getPlatform().window ? getPlatform().window!.toggleMaximize() : demo("window maximize"))}>
+          <button title="Maximize" className="ide-icon-btn h-7 w-9" onClick={() => (getPlatform().window ? getPlatform().window!.toggleMaximize() : demo("Window maximize")())}>
             <Square className="h-3 w-3" />
           </button>
-          <button title="Close" className="ide-icon-btn h-7 w-9 hover:!bg-destructive hover:!text-destructive-foreground" onClick={() => (getPlatform().window ? getPlatform().window!.close() : demo("window close"))}>
+          <button title="Close" className="ide-icon-btn h-7 w-9 hover:!bg-destructive hover:!text-destructive-foreground" onClick={() => (getPlatform().window ? getPlatform().window!.close() : demo("Window close")())}>
             <X className="h-4 w-4" />
           </button>
         </div>
