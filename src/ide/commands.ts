@@ -5,7 +5,7 @@ import { runEditorAction, pasteIntoEditor, askAboutSelection } from "./editorBri
 
 export type Command = { id: string; label: string; shortcut?: string; run: () => void; checked?: boolean; disabled?: boolean };
 
-const demo = (what: string) => () => toast(`${what}`, { description: "This is a demo workspace — nothing is saved." });
+export const demo = (what: string) => () => toast(`${what}`, { description: "This is a demo workspace — nothing is saved." });
 
 export function getCommands(ide: Ide): Command[] {
   const g = ide.groups[ide.activeGroup];

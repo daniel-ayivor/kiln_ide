@@ -30,6 +30,12 @@ export interface KilnShell {
   exec(input: string, ctx: ShellContext): ShellResult;
 }
 
+export interface KilnWindowControls {
+  minimize(): void;
+  toggleMaximize(): void;
+  close(): void;
+}
+
 export interface KilnPlatform {
   kind: "browser" | "electron";
   capabilities: {
@@ -39,6 +45,8 @@ export interface KilnPlatform {
   };
   fs: KilnFileSystem;
   shell: KilnShell;
+  /** Native window controls. Absent in the browser; the Electron bridge provides it. */
+  window?: KilnWindowControls;
 }
 
 /** Shape an Electron preload script should expose on `window`. */

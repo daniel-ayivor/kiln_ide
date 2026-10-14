@@ -19,7 +19,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useIde } from "../store";
-import { getCommands } from "../commands";
+import { getCommands, demo } from "../commands";
+import { getPlatform } from "../platform";
 import { languageFor } from "../mockFs";
 import { SETTINGS_TAB } from "../types";
 import { FileIcon } from "./Explorer";
@@ -80,10 +81,16 @@ export function TopBar() {
         <button title="Toggle Panel (Ctrl+J)" className={cn("ide-icon-btn h-6 w-6", ide.panelOpen && "text-foreground")} onClick={() => ide.setPanelOpen((o) => !o)}>
           <PanelBottom className="h-4 w-4" />
         </button>
-        <div className="ml-2 hidden items-center sm:flex" aria-hidden>
-          <span className="ide-icon-btn h-7 w-9"><Minus className="h-3.5 w-3.5" /></span>
-          <span className="ide-icon-btn h-7 w-9"><Square className="h-3 w-3" /></span>
-          <span className="ide-icon-btn h-7 w-9 hover:!bg-destructive hover:!text-destructive-foreground"><X className="h-4 w-4" /></span>
+        <div className="ml-2 hidden items-center sm:flex">
+          <button title="Minimize" className="ide-icon-btn h-7 w-9" onClick={() => (getPlatform().window ? getPlatform().window!.minimize() : demo("Window minimize")())}>
+            <Minus className="h-3.5 w-3.5" />
+          </button>
+          <button title="Maximize" className="ide-icon-btn h-7 w-9" onClick={() => (getPlatform().window ? getPlatform().window!.toggleMaximize() : demo("Window maximize")())}>
+            <Square className="h-3 w-3" />
+          </button>
+          <button title="Close" className="ide-icon-btn h-7 w-9 hover:!bg-destructive hover:!text-destructive-foreground" onClick={() => (getPlatform().window ? getPlatform().window!.close() : demo("Window close")())}>
+            <X className="h-4 w-4" />
+          </button>
         </div>
       </div>
     </header>
