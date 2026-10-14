@@ -19,7 +19,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useIde } from "../store";
-import { getCommands } from "../commands";
+import { getCommands, demo } from "../commands";
+import { getPlatform } from "../platform";
 import { languageFor } from "../mockFs";
 import { SETTINGS_TAB } from "../types";
 import { FileIcon } from "./Explorer";
