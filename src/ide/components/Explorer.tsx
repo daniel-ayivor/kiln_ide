@@ -206,13 +206,6 @@ import type { FsNode } from "../types";
 import { SectionHeader } from "./common";
 import { cn } from "@/lib/utils";
 
-// Define the interface to clear up the ts(2322) compilation error
-interface ExplorerProps {
-  projectPath: string | null;
-  workspaceFiles: string[];
-  onSelectWorkspace: () => Promise<void>;
-}
-
 export function FileIcon({ name, className }: { name: string; className?: string }) {
   return <FileText className={cn("h-4 w-4 shrink-0", fileColorClass(name), className)} strokeWidth={1.75} />;
 }
@@ -332,12 +325,14 @@ function TreeItem({ node, depth }: { node: FsNode; depth: number }) {
   );
 }
 
-export function Explorer({ projectPath, workspaceFiles, onSelectWorkspace }: ExplorerProps) {
+export function Explorer() {
   const ide = useIde();
   const openTabs = ide.groups.flatMap((g) => g.tabs).filter((t, i, a) => a.indexOf(t) === i && ide.nodes[t]);
 
-  // Extract the trailing directory name for display in the sidebar header
-  const folderName = projectPath ? projectPath.split(/[/\\]/).filter(Boolean).pop() : "No Workspace";
+  // The workspace comes from the platform layer: the browser build always
+  // has the mock "root"; in Electron it appears after Open Folder loads disk.
+  const hasWorkspace = !!ide.nodes.root;
+  const folderName = ide.nodes.root?.name ?? "No Workspace";
 
   return (
     <div className="flex h-full flex-col select-none">
