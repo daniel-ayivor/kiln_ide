@@ -14,7 +14,6 @@ var createWindow = () => {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      // Target the compiled JavaScript asset generated in the build folder
       preload: path.join(__dirname, "preload.js")
     }
   });
@@ -35,8 +34,45 @@ ipcMain.handle("ide:selectFolder", async () => {
 });
 ipcMain.handle("ide:readDirectory", async (event, folderPath) => {
   try {
-    const files = await fs.readdir(folderPath);
-    return { success: true, files };
+    async function buildTree(dirPath) {
+      const entries = await fs.readdir(dirPath, { withFileTypes: true });
+      const nodes = await Promise.all(
+        entries.map(async (entry) => {
+          const absolutePath = path.join(dirPath, entry.name);
+          const isDirectory = entry.isDirectory();
+          return {
+            id: absolutePath,
+            // Unique identifier used by frontend tree nodes
+            name: entry.name,
+            type: isDirectory ? "folder" : "file",
+            // Recursively build children array if it's a directory
+            children: isDirectory ? await buildTree(absolutePath) : void 0
+          };
+        })
+      );
+      return nodes.sort((a, b) => {
+        if (a.type !== b.type) return a.type === "folder" ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+    }
+    const treeData = await buildTree(folderPath);
+    return { success: true, files: treeData };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+ipcMain.handle("ide:readFile", async (event, filePath) => {
+  try {
+    const content = await fs.readFile(filePath, "utf-8");
+    return { success: true, content };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+ipcMain.handle("ide:writeFile", async (event, { filePath, content }) => {
+  try {
+    await fs.writeFile(filePath, content, "utf-8");
+    return { success: true };
   } catch (error) {
     return { success: false, error: error.message };
   }
