@@ -1,4 +1,5 @@
 import { childrenOf, createMockFs } from "../mockFs";
+import type { FsNode } from "../types";
 import type { KilnPlatform, ShellContext, ShellResult, TermLine } from "./types";
 
 function exec(cmdline: string, ctx: ShellContext): ShellResult {

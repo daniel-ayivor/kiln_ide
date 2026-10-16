@@ -32,8 +32,51 @@ const defaultSettings: Settings = {
 type Output = { channel: string; line: string; time: string };
 
 function useIdeState() {
-  const [initial] = useState(() => getPlatform().fs.loadWorkspace());
+  const [initial] = useState(() => {
+    const ws = getPlatform().fs.loadWorkspace();
+    // Electron's loadWorkspace is async (IPC); start empty and fill in below.
+    return ws instanceof Promise ? {} : ws;
+  });
   const [nodes, setNodes] = useState<Record<string, FsNode>>(initial);
+
+  // Async workspace load (Electron bridge) + external file-change subscription.
+  useEffect(() => {
+    const platform = getPlatform();
+    const ws = platform.fs.loadWorkspace();
+    if (ws instanceof Promise) {
+      let cancelled = false;
+      ws.then((loaded) => {
+        if (cancelled) return;
+        setNodes(loaded);
+        const contents = Object.fromEntries(
+          Object.values(loaded)
+            .filter((n) => n.type === "file")
+            .map((n) => [n.id, n.content ?? ""]),
+        );
+        setSaved(contents);
+        setCommitted({ ...contents });
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+    const unsubscribe = platform.fs.onFileChange?.((e) => {
+      if (e.kind === "deleted") {
+        setNodes((n) => {
+          const next = { ...n };
+          delete next[e.id];
+          return next;
+        });
+        return;
+      }
+      void platform.fs.readFile?.(e.id).then((content) => {
+        if (content === null || content === undefined) return;
+        setNodes((n) => (n[e.id] ? { ...n, [e.id]: { ...n[e.id], content } } : n));
+        setSaved((s) => ({ ...s, [e.id]: content }));
+      });
+    });
+    return unsubscribe;
+  }, []);
   const [saved, setSaved] = useState<Record<string, string>>(() =>
     Object.fromEntries(
       Object.values(initial)
