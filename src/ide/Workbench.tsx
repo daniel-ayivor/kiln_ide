@@ -1,3 +1,4 @@
+
 import { useEffect, useRef, useState } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { IdeProvider, useIde } from "./store";
@@ -11,6 +12,13 @@ import { TopBar, StatusBar, CommandPalette, ConfirmDialog } from "./components/C
 import { ContextMenuLayer, Resizer } from "./components/common";
 import { AccountProvider } from "./auth";
 import { ChatPanel } from "./components/ChatPanel";
+
+// Define strict prop validation for your Electron integration properties
+interface WorkbenchProps {
+  projectPath: string | null;
+  workspaceFiles: string[];
+  onSelectWorkspace: () => Promise<void>;
+}
 
 function useShortcuts() {
   const ide = useIde();
@@ -54,7 +62,8 @@ function useShortcuts() {
   }, []);
 }
 
-function Shell() {
+// Accept data into the execution view container
+function Shell({ projectPath, workspaceFiles, onSelectWorkspace }: WorkbenchProps) {
   const ide = useIde();
   useShortcuts();
   const [sidebarW, setSidebarW] = useState(260);
@@ -63,8 +72,15 @@ function Shell() {
   const mainRef = useRef<HTMLDivElement>(null);
   const { chatOpen, setChatOpen } = ide;
 
+  // Pass Electron file arrays down dynamically into your explorer side panel view
   const View = {
-    explorer: Explorer,
+    explorer: () => (
+      <Explorer 
+        projectPath={projectPath} 
+        workspaceFiles={workspaceFiles} 
+        onSelectWorkspace={onSelectWorkspace} 
+      />
+    ),
     search: SearchPanel,
     scm: SourceControlPanel,
     run: RunPanel,
@@ -112,11 +128,18 @@ function Shell() {
   );
 }
 
-export function Workbench() {
+export function Workbench({ projectPath, workspaceFiles, onSelectWorkspace }: WorkbenchProps) {
   return (
     <IdeProvider>
       <TooltipProvider>
-        <AccountProvider><Shell /></AccountProvider>
+        <AccountProvider>
+          {/* Feed configuration downward from route handlers */}
+          <Shell 
+            projectPath={projectPath}
+            workspaceFiles={workspaceFiles}
+            onSelectWorkspace={onSelectWorkspace}
+          />
+        </AccountProvider>
       </TooltipProvider>
     </IdeProvider>
   );
