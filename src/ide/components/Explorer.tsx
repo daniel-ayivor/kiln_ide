@@ -340,8 +340,8 @@ export function Explorer() {
         title="Explorer"
         actions={
           <>
-            <button className="ide-icon-btn h-6 w-6" title="New File" onClick={() => ide.createNode(ide.selected ?? "root", "file")} disabled={!projectPath}><FilePlus className="h-4 w-4" /></button>
-            <button className="ide-icon-btn h-6 w-6" title="New Folder" onClick={() => ide.createNode(ide.selected ?? "root", "folder")} disabled={!projectPath}><FolderPlus className="h-4 w-4" /></button>
+            <button className="ide-icon-btn h-6 w-6" title="New File" onClick={() => ide.createNode(ide.selected ?? "root", "file")} disabled={!hasWorkspace}><FilePlus className="h-4 w-4" /></button>
+            <button className="ide-icon-btn h-6 w-6" title="New Folder" onClick={() => ide.createNode(ide.selected ?? "root", "folder")} disabled={!hasWorkspace}><FolderPlus className="h-4 w-4" /></button>
             <button className="ide-icon-btn h-6 w-6" title="Refresh" onClick={() => ide.log("Explorer refreshed")}><RefreshCw className="h-3.5 w-3.5" /></button>
             <button className="ide-icon-btn h-6 w-6" title="Collapse Folders" onClick={() => ide.expanded.forEach((id) => id !== "root" && ide.toggleFolder(id))}><ChevronsDownUp className="h-4 w-4" /></button>
           </>
@@ -365,7 +365,7 @@ export function Explorer() {
         className="min-h-0 flex-1 overflow-auto py-1"
         role="tree"
         onContextMenu={(e) => {
-          if (!projectPath || e.target !== e.currentTarget) return;
+          if (!hasWorkspace || e.target !== e.currentTarget) return;
           e.preventDefault();
           ide.setMenu({
             x: e.clientX,
@@ -377,16 +377,15 @@ export function Explorer() {
           });
         }}
       >
-        {projectPath ? (
+        {hasWorkspace ? (
           <>
-            {/* Display opened system project name */}
+            {/* Display opened workspace name */}
             <div className="px-2 pb-1 text-[11px] font-bold uppercase tracking-wider text-foreground/80 flex items-center gap-1.5">
               <FolderIcon className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="truncate" title={projectPath}>{folderName}</span>
+              <span className="truncate" title={ide.nodes.root.id}>{folderName}</span>
             </div>
-            
-            {/* Populate active subdirectories or workspace files lists */}
-            {workspaceFiles.length === 0 ? (
+
+            {childrenOf(ide.nodes, "root").length === 0 ? (
               <div className="px-4 py-2 text-[12px] text-muted-foreground italic">Empty directory</div>
             ) : (
               childrenOf(ide.nodes, "root").map((n) => (
@@ -395,13 +394,13 @@ export function Explorer() {
             )}
           </>
         ) : (
-          /* Native workspace entry prompt when no active project path is registered */
+          /* Workspace entry prompt when no folder is open (Electron) */
           <div className="p-4 flex flex-col items-center justify-center text-center h-48 gap-3">
             <p className="text-[12px] text-muted-foreground leading-normal">
               You have not opened a workspace folder yet.
             </p>
             <button
-              onClick={onSelectWorkspace}
+              onClick={() => void ide.openFolder()}
               className="px-3 py-1.5 text-[12px] font-medium bg-primary text-primary-foreground hover:bg-primary/90 rounded shadow-sm transition-colors cursor-pointer"
             >
               Open Folder
