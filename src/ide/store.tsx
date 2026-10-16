@@ -218,19 +218,18 @@ function useIdeState() {
     (id?: string | null) => {
       const target = id ?? groups[activeGroup]?.active;
       if (!target || !nodes[target] || nodes[target].type !== "file") return;
-      setSaved((s) => ({ ...s, [target]: nodes[target].content ?? "" }));
+      const content = nodes[target].content ?? "";
+      setSaved((s) => ({ ...s, [target]: content }));
+      void getPlatform().fs.saveFile(target, content);
       log(`Saved ${target}`);
     },
     [groups, activeGroup, nodes, log],
   );
   const saveAll = useCallback(() => {
-    setSaved(
-      Object.fromEntries(
-        Object.values(nodes)
-          .filter((n) => n.type === "file")
-          .map((n) => [n.id, n.content ?? ""]),
-      ),
-    );
+    const files = Object.values(nodes).filter((n) => n.type === "file");
+    setSaved(Object.fromEntries(files.map((n) => [n.id, n.content ?? ""])));
+    const fs = getPlatform().fs;
+    for (const n of files) void fs.saveFile(n.id, n.content ?? "");
     log("Saved all files");
   }, [nodes, log]);
 
@@ -238,9 +237,14 @@ function useIdeState() {
   useEffect(() => {
     if (!settings.autoSave) return;
     const t = setTimeout(() => {
+      const fs = getPlatform().fs;
       setSaved((s) => {
         const next = { ...s };
-        for (const n of Object.values(nodes)) if (n.type === "file") next[n.id] = n.content ?? "";
+        for (const n of Object.values(nodes))
+          if (n.type === "file") {
+            next[n.id] = n.content ?? "";
+            void fs.saveFile(n.id, n.content ?? "");
+          }
         return next;
       });
     }, 800);
