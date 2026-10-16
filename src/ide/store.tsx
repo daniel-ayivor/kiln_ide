@@ -32,8 +32,51 @@ const defaultSettings: Settings = {
 type Output = { channel: string; line: string; time: string };
 
 function useIdeState() {
-  const [initial] = useState(() => getPlatform().fs.loadWorkspace());
+  const [initial] = useState(() => {
+    const ws = getPlatform().fs.loadWorkspace();
+    // Electron's loadWorkspace is async (IPC); start empty and fill in below.
+    return ws instanceof Promise ? {} : ws;
+  });
   const [nodes, setNodes] = useState<Record<string, FsNode>>(initial);
+
+  // Async workspace load (Electron bridge) + external file-change subscription.
+  useEffect(() => {
+    const platform = getPlatform();
+    const ws = platform.fs.loadWorkspace();
+    if (ws instanceof Promise) {
+      let cancelled = false;
+      ws.then((loaded) => {
+        if (cancelled) return;
+        setNodes(loaded);
+        const contents = Object.fromEntries(
+          Object.values(loaded)
+            .filter((n) => n.type === "file")
+            .map((n) => [n.id, n.content ?? ""]),
+        );
+        setSaved(contents);
+        setCommitted({ ...contents });
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+    const unsubscribe = platform.fs.onFileChange?.((e) => {
+      if (e.kind === "deleted") {
+        setNodes((n) => {
+          const next = { ...n };
+          delete next[e.id];
+          return next;
+        });
+        return;
+      }
+      void platform.fs.readFile?.(e.id).then((content) => {
+        if (content === null || content === undefined) return;
+        setNodes((n) => (n[e.id] ? { ...n, [e.id]: { ...n[e.id], content } } : n));
+        setSaved((s) => ({ ...s, [e.id]: content }));
+      });
+    });
+    return unsubscribe;
+  }, []);
   const [saved, setSaved] = useState<Record<string, string>>(() =>
     Object.fromEntries(
       Object.values(initial)
@@ -175,19 +218,18 @@ function useIdeState() {
     (id?: string | null) => {
       const target = id ?? groups[activeGroup]?.active;
       if (!target || !nodes[target] || nodes[target].type !== "file") return;
-      setSaved((s) => ({ ...s, [target]: nodes[target].content ?? "" }));
+      const content = nodes[target].content ?? "";
+      setSaved((s) => ({ ...s, [target]: content }));
+      void getPlatform().fs.saveFile(target, content);
       log(`Saved ${target}`);
     },
     [groups, activeGroup, nodes, log],
   );
   const saveAll = useCallback(() => {
-    setSaved(
-      Object.fromEntries(
-        Object.values(nodes)
-          .filter((n) => n.type === "file")
-          .map((n) => [n.id, n.content ?? ""]),
-      ),
-    );
+    const files = Object.values(nodes).filter((n) => n.type === "file");
+    setSaved(Object.fromEntries(files.map((n) => [n.id, n.content ?? ""])));
+    const fs = getPlatform().fs;
+    for (const n of files) void fs.saveFile(n.id, n.content ?? "");
     log("Saved all files");
   }, [nodes, log]);
 
@@ -195,9 +237,14 @@ function useIdeState() {
   useEffect(() => {
     if (!settings.autoSave) return;
     const t = setTimeout(() => {
+      const fs = getPlatform().fs;
       setSaved((s) => {
         const next = { ...s };
-        for (const n of Object.values(nodes)) if (n.type === "file") next[n.id] = n.content ?? "";
+        for (const n of Object.values(nodes))
+          if (n.type === "file") {
+            next[n.id] = n.content ?? "";
+            void fs.saveFile(n.id, n.content ?? "");
+          }
         return next;
       });
     }, 800);
@@ -276,6 +323,27 @@ function useIdeState() {
     [nodes, log],
   );
 
+  // Electron only: native folder picker, then load that workspace from disk.
+  const openFolder = useCallback(async () => {
+    const fs = getPlatform().fs;
+    if (!fs.openFolder) return;
+    const picked = await fs.openFolder();
+    if (!picked) return;
+    const loaded = await fs.loadWorkspace();
+    setNodes(loaded);
+    const contents = Object.fromEntries(
+      Object.values(loaded)
+        .filter((n) => n.type === "file")
+        .map((n) => [n.id, n.content ?? ""]),
+    );
+    setSaved(contents);
+    setCommitted({ ...contents });
+    setGroups([{ id: "g1", tabs: [], active: null }]);
+    setActiveGroup(0);
+    setExpanded(new Set(["root"]));
+    log(`Opened workspace ${picked}`);
+  }, [log]);
+
   const toggleFolder = useCallback((id: string) => {
     setExpanded((e) => {
       const n = new Set(e);
@@ -329,7 +397,7 @@ function useIdeState() {
     menu, setMenu, renaming, setRenaming, reveal, setReveal, debugging, setDebugging, confirm,
     setConfirm, branch, dirty, selection, setSelection, chatOpen, setChatOpen, chatDraft, setChatDraft, chatThreads, setChatThreads, changes, committed,
     openFile, closeTab, closeOthers, closeAll, splitRight, updateContent, save, saveAll,
-    createNode, renameNode, deleteNode, commit, toggleFolder, showView, showPanel,
+    createNode, renameNode, deleteNode, commit, toggleFolder, showView, showPanel, openFolder,
   };
 }
 

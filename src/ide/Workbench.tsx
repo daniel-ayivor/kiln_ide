@@ -13,13 +13,6 @@ import { ContextMenuLayer, Resizer } from "./components/common";
 import { AccountProvider } from "./auth";
 import { ChatPanel } from "./components/ChatPanel";
 
-// Define strict prop validation for your Electron integration properties
-interface WorkbenchProps {
-  projectPath: string | null;
-  workspaceFiles: string[];
-  onSelectWorkspace: () => Promise<void>;
-}
-
 function useShortcuts() {
   const ide = useIde();
   const ref = useRef(ide);
@@ -62,8 +55,7 @@ function useShortcuts() {
   }, []);
 }
 
-// Accept data into the execution view container
-function Shell({ projectPath, workspaceFiles, onSelectWorkspace }: WorkbenchProps) {
+function Shell() {
   const ide = useIde();
   useShortcuts();
   const [sidebarW, setSidebarW] = useState(260);
@@ -72,15 +64,8 @@ function Shell({ projectPath, workspaceFiles, onSelectWorkspace }: WorkbenchProp
   const mainRef = useRef<HTMLDivElement>(null);
   const { chatOpen, setChatOpen } = ide;
 
-  // Pass Electron file arrays down dynamically into your explorer side panel view
   const View = {
-    explorer: () => (
-      <Explorer 
-        projectPath={projectPath} 
-        workspaceFiles={workspaceFiles} 
-        onSelectWorkspace={onSelectWorkspace} 
-      />
-    ),
+    explorer: Explorer,
     search: SearchPanel,
     scm: SourceControlPanel,
     run: RunPanel,
@@ -128,17 +113,12 @@ function Shell({ projectPath, workspaceFiles, onSelectWorkspace }: WorkbenchProp
   );
 }
 
-export function Workbench({ projectPath, workspaceFiles, onSelectWorkspace }: WorkbenchProps) {
+export function Workbench() {
   return (
     <IdeProvider>
       <TooltipProvider>
         <AccountProvider>
-          {/* Feed configuration downward from route handlers */}
-          <Shell 
-            projectPath={projectPath}
-            workspaceFiles={workspaceFiles}
-            onSelectWorkspace={onSelectWorkspace}
-          />
+          <Shell />
         </AccountProvider>
       </TooltipProvider>
     </IdeProvider>

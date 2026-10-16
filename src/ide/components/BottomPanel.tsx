@@ -20,8 +20,8 @@ function Terminal({ term, onUpdate }: { term: Term; onUpdate: (t: Term) => void 
     scroller.current?.scrollTo(0, scroller.current.scrollHeight);
   }, [term.lines.length]);
 
-  const run = (cmdline: string) => {
-    const r = getPlatform().shell.exec(cmdline, {
+  const run = async (cmdline: string) => {
+    const r = await getPlatform().shell.exec(cmdline, {
       cwd: term.cwd,
       nodes: ide.nodes,
       branch: ide.branch,

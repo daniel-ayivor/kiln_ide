@@ -1,4 +1,5 @@
 import { childrenOf, createMockFs } from "../mockFs";
+import type { FsNode } from "../types";
 import type { KilnPlatform, ShellContext, ShellResult, TermLine } from "./types";
 
 function exec(cmdline: string, ctx: ShellContext): ShellResult {
@@ -81,10 +82,35 @@ function exec(cmdline: string, ctx: ShellContext): ShellResult {
   return { lines };
 }
 
+/** Browser persistence: saved file contents survive reloads via localStorage. */
+const savedKey = (id: string) => `kiln.fs.${id}`;
+
+function loadWorkspace(): Record<string, FsNode> {
+  const nodes = createMockFs();
+  try {
+    for (const n of Object.values(nodes)) {
+      if (n.type !== "file") continue;
+      const stored = localStorage.getItem(savedKey(n.id));
+      if (stored !== null) n.content = stored;
+    }
+  } catch {
+    /* storage unavailable */
+  }
+  return nodes;
+}
+
+function saveFile(id: string, content: string): void {
+  try {
+    localStorage.setItem(savedKey(id), content);
+  } catch {
+    /* storage unavailable */
+  }
+}
+
 /** Default in-browser platform: mock workspace + simulated shell. */
 export const browserPlatform: KilnPlatform = {
   kind: "browser",
   capabilities: { realFileSystem: false, realTerminal: false, windowControls: false },
-  fs: { loadWorkspace: createMockFs },
+  fs: { loadWorkspace, saveFile },
   shell: { exec },
 };

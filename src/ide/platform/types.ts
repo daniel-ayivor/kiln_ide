@@ -20,14 +20,39 @@ export type ShellContext = {
 
 export type ShellResult = { lines: TermLine[]; cwd?: string; clear?: boolean };
 
+/** Notification that a file changed outside the editor (e.g. fs.watch). */
+export type FileChangeEvent = { id: string; kind: "changed" | "created" | "deleted" };
+
 export interface KilnFileSystem {
-  /** Initial workspace tree. Sync in the browser; may be async in Electron. */
-  loadWorkspace(): Record<string, FsNode>;
+  /**
+   * Initial workspace tree. Sync in the browser; may be async in Electron
+   * (IPC round-trip), so callers must handle a Promise.
+   */
+  loadWorkspace(): Record<string, FsNode> | Promise<Record<string, FsNode>>;
+  /**
+   * Persist a file's content. The browser build writes to localStorage;
+   * the Electron build writes to the real file on disk. Called on Save,
+   * Save All, and auto-save.
+   */
+  saveFile(id: string, content: string): void | Promise<void>;
+  /**
+   * Subscribe to file changes made outside the editor (another program
+   * editing the file on disk). Returns an unsubscribe function. Optional:
+   * the browser build has no external changes to report.
+   */
+  onFileChange?(cb: (e: FileChangeEvent) => void): () => void;
+  /**
+   * Read the current content of one file. Used to refresh a file after an
+   * external "changed" event. Optional in the browser (content is in memory).
+   */
+  readFile?(id: string): Promise<string | null>;
+  /** Native folder picker. Electron only; absent in the browser. */
+  openFolder?(): Promise<string | null>;
 }
 
 export interface KilnShell {
   /** Execute one command line. Returns output lines and an optional new cwd. */
-  exec(input: string, ctx: ShellContext): ShellResult;
+  exec(input: string, ctx: ShellContext): ShellResult | Promise<ShellResult>;
 }
 
 export interface KilnWindowControls {

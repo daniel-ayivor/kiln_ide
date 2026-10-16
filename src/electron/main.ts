@@ -1,187 +1,161 @@
-// import { app, BrowserWindow, ipcMain, dialog } from 'electron';
-// import * as path from 'path';
-// import * as fs from 'fs/promises';
-// import { fileURLToPath } from 'url';
-
-// // Reconstruct __dirname for ES modules (Fixes the ReferenceError)
-// const __filename = fileURLToPath(import.meta.url);
-// const __dirname = path.dirname(__filename);
-
-// const createWindow = () => {
-//   const mainWindow = new BrowserWindow({
-//     width: 1200,
-//     height: 800,
-//     frame: false, 
-//     autoHideMenuBar: true,
-//     webPreferences: {
-//       nodeIntegration: false,
-//       contextIsolation: true,
-//       // Target the compiled JavaScript asset generated in the build folder
-//       preload: path.join(__dirname, 'preload.js'), 
-//     },
-//   });
-
-//   mainWindow.loadURL('http://localhost:8082');
-
-//   // Gracefully handle reloading if the dev server isn't ready instantly
-//   mainWindow.webContents.on('did-fail-load', () => {
-//     mainWindow.loadURL('http://localhost:8082');
-//   });
-
-//   // IPC channel to update title from renderer if needed
-//   ipcMain.on('electron:setTitle', (event, title: string) => {
-//     mainWindow.setTitle(title);
-//   });
-// };
-
-// // --- IPC File System Handlers ---
-
-// // Native Operating System folder picker
-// ipcMain.handle('ide:selectFolder', async () => {
-//   const result = await dialog.showOpenDialog({
-//     properties: ['openDirectory'],
-//   });
-//   if (result.canceled || result.filePaths.length === 0) return null;
-//   return result.filePaths[0];
-// });
-
-// // Safe Directory Reader returning filenames
-// ipcMain.handle('ide:readDirectory', async (event, folderPath: string) => {
-//   try {
-//     const files = await fs.readdir(folderPath);
-//     return { success: true, files };
-//   } catch (error: any) {
-//     return { success: false, error: error.message };
-//   }
-// });
-
-// app.whenReady().then(() => {
-//   createWindow();
-
-//   app.on('activate', () => {
-//     if (BrowserWindow.getAllWindows().length === 0) {
-//       createWindow();
-//     }
-//   });
-// });
-
-// app.on('window-all-closed', () => {
-//   if (process.platform !== 'darwin') {
-//     app.quit();
-//   }
-// });
-
-
-
 import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs/promises';
+import { watch, type FSWatcher } from 'fs';
+import { exec as execCb } from 'child_process';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Workspace root: the folder the user picked, or the app directory by default.
+let workspaceRoot = process.cwd();
+let watcher: FSWatcher | null = null;
+let mainWindow: BrowserWindow | null = null;
+
+const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:8082';
+
 const createWindow = () => {
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
-    frame: false, 
+    frame: false,
     autoHideMenuBar: true,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js'), 
+      preload: path.join(__dirname, 'preload.js'),
     },
   });
 
-  mainWindow.loadURL('http://localhost:8082');
-
-  mainWindow.webContents.on('did-fail-load', () => {
-    mainWindow.loadURL('http://localhost:8082');
-  });
-
-  ipcMain.on('electron:setTitle', (event, title: string) => {
-    mainWindow.setTitle(title);
-  });
+  if (DEV_SERVER_URL) {
+    mainWindow.loadURL(DEV_SERVER_URL);
+    mainWindow.webContents.on('did-fail-load', () => mainWindow?.loadURL(DEV_SERVER_URL));
+  } else {
+    // Packaged build: load the built UI from disk (requires vite base: './').
+    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+  }
 };
 
-// --- IPC IDE File System Handlers ---
+// --- Window controls (frameless window) ---
 
-// 1. Native Folder Picker
-ipcMain.handle('ide:selectFolder', async () => {
-  const result = await dialog.showOpenDialog({
-    properties: ['openDirectory'],
-  });
-  if (result.canceled || result.filePaths.length === 0) return null;
-  return result.filePaths[0]; // Returns a single absolute folder path string
+ipcMain.on('kiln:minimize', () => mainWindow?.minimize());
+ipcMain.on('kiln:toggleMaximize', () => {
+  if (!mainWindow) return;
+  if (mainWindow.isMaximized()) mainWindow.unmaximize();
+  else mainWindow.maximize();
 });
+ipcMain.on('kiln:close', () => mainWindow?.close());
 
-// 2. Recursive Directory Mapper for Nested Sidebars
-ipcMain.handle('ide:readDirectory', async (event, folderPath: string) => {
-  try {
-    async function buildTree(dirPath: string): Promise<any[]> {
-      const entries = await fs.readdir(dirPath, { withFileTypes: true });
-      const nodes = await Promise.all(
-        entries.map(async (entry) => {
-          const absolutePath = path.join(dirPath, entry.name);
-          const isDirectory = entry.isDirectory();
+// --- File system handlers (kilnBridge.fs) ---
 
-          return {
-            id: absolutePath, // Unique identifier used by frontend tree nodes
-            name: entry.name,
-            type: isDirectory ? 'folder' : 'file',
-            // Recursively build children array if it's a directory
-            children: isDirectory ? await buildTree(absolutePath) : undefined,
-          };
-        })
-      );
-      
-      // Sort folders first, then files alphabetically
-      return nodes.sort((a, b) => {
-        if (a.type !== b.type) return a.type === 'folder' ? -1 : 1;
-        return a.name.localeCompare(b.name);
-      });
+type FsNodeItem = {
+  id: string; // absolute path
+  name: string;
+  type: 'file' | 'folder';
+  parentId: string | null;
+  content?: string;
+};
+
+const IGNORED = new Set(['node_modules', '.git', 'dist', 'dist-electron']);
+
+async function buildTree(dirPath: string, parentId: string | null, out: Record<string, FsNodeItem>) {
+  const entries = await fs.readdir(dirPath, { withFileTypes: true });
+  for (const entry of entries) {
+    if (IGNORED.has(entry.name)) continue;
+    const absolutePath = path.join(dirPath, entry.name);
+    const isDirectory = entry.isDirectory();
+    const node: FsNodeItem = {
+      id: absolutePath,
+      name: entry.name,
+      type: isDirectory ? 'folder' : 'file',
+      parentId,
+    };
+    if (!isDirectory) {
+      try {
+        node.content = await fs.readFile(absolutePath, 'utf-8');
+      } catch {
+        node.content = ''; // binary or unreadable file
+      }
     }
+    out[absolutePath] = node;
+    if (isDirectory) await buildTree(absolutePath, absolutePath, out);
+  }
+}
 
-    const treeData = await buildTree(folderPath);
-    return { success: true, files: treeData };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+function startWatching() {
+  watcher?.close();
+  watcher = null;
+  try {
+    watcher = watch(workspaceRoot, { recursive: true }, (eventType, filename) => {
+      if (!filename || !mainWindow) return;
+      const id = path.join(workspaceRoot, filename);
+      mainWindow.webContents.send('kiln:fileChanged', {
+        id,
+        kind: eventType === 'rename' ? 'created' : 'changed',
+      });
+    });
+  } catch {
+    // Recursive watch unsupported on this platform — file watching disabled.
+  }
+}
+
+ipcMain.handle('kiln:loadWorkspace', async () => {
+  const nodes: Record<string, FsNodeItem> = {
+    root: { id: 'root', name: path.basename(workspaceRoot), type: 'folder', parentId: null },
+  };
+  await buildTree(workspaceRoot, 'root', nodes);
+  startWatching();
+  return nodes;
+});
+
+ipcMain.handle('kiln:openFolder', async () => {
+  const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
+  if (result.canceled || result.filePaths.length === 0) return null;
+  workspaceRoot = result.filePaths[0];
+  return workspaceRoot;
+});
+
+ipcMain.handle('kiln:readFile', async (_event, filePath: string) => {
+  try {
+    return await fs.readFile(filePath, 'utf-8');
+  } catch {
+    return null;
   }
 });
 
-// 3. File Reader (Triggered on file node click)
-ipcMain.handle('ide:readFile', async (event, filePath: string) => {
+ipcMain.handle('kiln:saveFile', async (_event, { id, content }: { id: string; content: string }) => {
   try {
-    const content = await fs.readFile(filePath, 'utf-8');
-    return { success: true, content };
-  } catch (error: any) {
-    return { success: false, error: error.message };
-  }
-});
-
-// 4. File Writer (Triggered on Save shortcut Ctrl+S)
-ipcMain.handle('ide:writeFile', async (event, { filePath, content }: { filePath: string; content: string }) => {
-  try {
-    await fs.writeFile(filePath, content, 'utf-8');
+    await fs.writeFile(id, content, 'utf-8');
     return { success: true };
   } catch (error: any) {
     return { success: false, error: error.message };
   }
 });
 
+// --- Real terminal (kilnBridge.shell) ---
+
+ipcMain.handle('kiln:exec', (_event, { input, cwd }: { input: string; cwd: string }) => {
+  const dir = cwd === '~' || !cwd ? workspaceRoot : cwd;
+  return new Promise((resolve) => {
+    execCb(input, { cwd: dir, timeout: 30_000 }, (error, stdout, stderr) => {
+      const lines: { kind: string; text: string }[] = [{ kind: 'in', text: input }];
+      if (stdout) stdout.trimEnd().split('\n').forEach((l) => lines.push({ kind: 'out', text: l }));
+      if (stderr) stderr.trimEnd().split('\n').forEach((l) => lines.push({ kind: 'err', text: l }));
+      if (error && !stderr) lines.push({ kind: 'err', text: error.message });
+      resolve({ lines });
+    });
+  });
+});
+
 app.whenReady().then(() => {
   createWindow();
-
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
-    }
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
+  watcher?.close();
+  if (process.platform !== 'darwin') app.quit();
 });
