@@ -323,6 +323,27 @@ function useIdeState() {
     [nodes, log],
   );
 
+  // Electron only: native folder picker, then load that workspace from disk.
+  const openFolder = useCallback(async () => {
+    const fs = getPlatform().fs;
+    if (!fs.openFolder) return;
+    const picked = await fs.openFolder();
+    if (!picked) return;
+    const loaded = await fs.loadWorkspace();
+    setNodes(loaded);
+    const contents = Object.fromEntries(
+      Object.values(loaded)
+        .filter((n) => n.type === "file")
+        .map((n) => [n.id, n.content ?? ""]),
+    );
+    setSaved(contents);
+    setCommitted({ ...contents });
+    setGroups([{ id: "g1", tabs: [], active: null }]);
+    setActiveGroup(0);
+    setExpanded(new Set(["root"]));
+    log(`Opened workspace ${picked}`);
+  }, [log]);
+
   const toggleFolder = useCallback((id: string) => {
     setExpanded((e) => {
       const n = new Set(e);
@@ -376,7 +397,7 @@ function useIdeState() {
     menu, setMenu, renaming, setRenaming, reveal, setReveal, debugging, setDebugging, confirm,
     setConfirm, branch, dirty, selection, setSelection, chatOpen, setChatOpen, chatDraft, setChatDraft, chatThreads, setChatThreads, changes, committed,
     openFile, closeTab, closeOthers, closeAll, splitRight, updateContent, save, saveAll,
-    createNode, renameNode, deleteNode, commit, toggleFolder, showView, showPanel,
+    createNode, renameNode, deleteNode, commit, toggleFolder, showView, showPanel, openFolder,
   };
 }
 
