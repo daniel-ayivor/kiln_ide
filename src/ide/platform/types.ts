@@ -56,9 +56,10 @@ export interface KilnShell {
 }
 
 export interface KilnWindowControls {
-  minimize(): void;
-  toggleMaximize(): void;
-  close(): void;
+  minimize: () => void;
+  toggleMaximize: () => void;
+  close: () => void;
+  openNewWindow?: () => Promise<void>; // <-- Add this line
 }
 
 export interface KilnPlatform {

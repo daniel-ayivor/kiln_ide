@@ -1,14 +1,17 @@
+
+
+
 import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import { watch, type FSWatcher } from 'fs';
 import { exec as execCb } from 'child_process';
 import { fileURLToPath } from 'url';
+import * as fsSync from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Workspace root: the folder the user picked, or the app directory by default.
 let workspaceRoot = process.cwd();
 let watcher: FSWatcher | null = null;
 let mainWindow: BrowserWindow | null = null;
@@ -16,6 +19,13 @@ let mainWindow: BrowserWindow | null = null;
 const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:8082';
 
 const createWindow = () => {
+  let preloadPath = path.join(__dirname, 'preload.js');
+  if (!fsSync.existsSync(preloadPath)) {
+    preloadPath = path.join(__dirname, 'preload.cjs');
+  }
+
+  console.log('[Electron Main] Preload script path:', preloadPath);
+
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -24,7 +34,7 @@ const createWindow = () => {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js'),
+      preload: preloadPath,
     },
   });
 
@@ -32,13 +42,11 @@ const createWindow = () => {
     mainWindow.loadURL(DEV_SERVER_URL);
     mainWindow.webContents.on('did-fail-load', () => mainWindow?.loadURL(DEV_SERVER_URL));
   } else {
-    // Packaged build: load the built UI from disk (requires vite base: './').
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
 };
 
 // --- Window controls (frameless window) ---
-
 ipcMain.on('kiln:minimize', () => mainWindow?.minimize());
 ipcMain.on('kiln:toggleMaximize', () => {
   if (!mainWindow) return;
@@ -47,10 +55,9 @@ ipcMain.on('kiln:toggleMaximize', () => {
 });
 ipcMain.on('kiln:close', () => mainWindow?.close());
 
-// --- File system handlers (kilnBridge.fs) ---
-
+// --- File system handlers ---
 type FsNodeItem = {
-  id: string; // absolute path
+  id: string;
   name: string;
   type: 'file' | 'folder';
   parentId: string | null;
@@ -75,7 +82,7 @@ async function buildTree(dirPath: string, parentId: string | null, out: Record<s
       try {
         node.content = await fs.readFile(absolutePath, 'utf-8');
       } catch {
-        node.content = ''; // binary or unreadable file
+        node.content = '';
       }
     }
     out[absolutePath] = node;
@@ -95,9 +102,7 @@ function startWatching() {
         kind: eventType === 'rename' ? 'created' : 'changed',
       });
     });
-  } catch {
-    // Recursive watch unsupported on this platform — file watching disabled.
-  }
+  } catch {}
 }
 
 ipcMain.handle('kiln:loadWorkspace', async () => {
@@ -107,6 +112,10 @@ ipcMain.handle('kiln:loadWorkspace', async () => {
   await buildTree(workspaceRoot, 'root', nodes);
   startWatching();
   return nodes;
+});
+
+ipcMain.handle('kiln:openNewWindow', () => {
+  createWindow();
 });
 
 ipcMain.handle('kiln:openFolder', async () => {
@@ -133,8 +142,7 @@ ipcMain.handle('kiln:saveFile', async (_event, { id, content }: { id: string; co
   }
 });
 
-// --- Real terminal (kilnBridge.shell) ---
-
+// --- Real terminal ---
 ipcMain.handle('kiln:exec', (_event, { input, cwd }: { input: string; cwd: string }) => {
   const dir = cwd === '~' || !cwd ? workspaceRoot : cwd;
   return new Promise((resolve) => {
@@ -150,12 +158,17 @@ ipcMain.handle('kiln:exec', (_event, { input, cwd }: { input: string; cwd: strin
 
 app.whenReady().then(() => {
   createWindow();
+
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow();
+    }
   });
 });
 
 app.on('window-all-closed', () => {
   watcher?.close();
-  if (process.platform !== 'darwin') app.quit();
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
 });

@@ -4,11 +4,11 @@
   "sideEffects": false,
   "type": "module",
   "main": "dist-electron/main.mjs",
-  "scripts": {
+"scripts": {
     "dev": "concurrently \"npm run dev:vite\" \"npm run dev:electron\"",
     "dev:vite": "vite dev --port 8082 --strictPort",
     "dev:electron": "wait-on http-get://localhost:8082 && npm run build:electron && electron .",
-    "build:electron": "esbuild src/electron/main.ts --bundle --platform=node --format=esm --external:electron --outfile=dist-electron/main.mjs",
+    "build:electron": "esbuild src/electron/main.ts --bundle --platform=node --format=esm --external:electron --outfile=dist-electron/main.mjs && esbuild src/electron/preload.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist-electron/preload.js",
     "electron": "npm run build:electron && electron .",
     "build": "vite build",
     "build:dev": "vite build --mode development",
@@ -120,6 +120,7 @@
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.56.1",
     "vite": "8.1.5",
+    "vite-plugin-electron": "^1.1.2",
     "vitest": "^4.1.10",
     "wait-on": "^8.0.5"
   }

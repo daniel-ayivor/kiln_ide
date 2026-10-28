@@ -35,5 +35,7 @@ contextBridge.exposeInMainWorld('kilnBridge', {
     minimize: () => ipcRenderer.send('kiln:minimize'),
     toggleMaximize: () => ipcRenderer.send('kiln:toggleMaximize'),
     close: () => ipcRenderer.send('kiln:close'),
+    // Spawns a fresh window instance natively
+    openNewWindow: () => ipcRenderer.invoke('kiln:openNewWindow'),
   },
 });
