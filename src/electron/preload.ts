@@ -31,6 +31,10 @@ contextBridge.exposeInMainWorld('kilnBridge', {
     exec: (input: string, ctx: { cwd: string }) => ipcRenderer.invoke('kiln:exec', { input, cwd: ctx.cwd }),
   },
 
+  extensions: {
+    search: (query: string) => ipcRenderer.invoke('kiln:searchExtensions', query),
+  },
+  
   window: {
     minimize: () => ipcRenderer.send('kiln:minimize'),
     toggleMaximize: () => ipcRenderer.send('kiln:toggleMaximize'),

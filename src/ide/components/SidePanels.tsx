@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   CaseSensitive,
   Regex,
@@ -14,11 +14,25 @@ import {
   Download,
   GitBranch,
   SearchX,
+  Package,
 } from "lucide-react";
 import { useIde } from "../store";
 import { FileIcon } from "./Explorer";
 import { EmptyState, SectionHeader } from "./common";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+
+export interface VsxExtension {
+  namespace: string;
+  name: string;
+  version: string;
+  displayName?: string;
+  description?: string;
+  iconUrl?: string;
+  downloadCount: number;
+  averageRating?: number;
+  files: any;
+}
 
 export function SearchPanel() {
   const ide = useIde();
@@ -242,70 +256,121 @@ export function RunPanel() {
   );
 }
 
-const EXTENSIONS = [
-  { id: "prettier", name: "Prettier", author: "Prettier", desc: "Opinionated code formatter", downloads: "48M", rating: 4.8 },
-  { id: "eslint", name: "ESLint", author: "Microsoft", desc: "Integrates ESLint into the editor", downloads: "32M", rating: 4.6 },
-  { id: "gitlens", name: "GitLens", author: "GitKraken", desc: "Supercharge Git inside your editor", downloads: "29M", rating: 4.7 },
-  { id: "tailwind", name: "Tailwind IntelliSense", author: "Tailwind Labs", desc: "Autocomplete and linting for Tailwind CSS", downloads: "11M", rating: 4.9 },
-  { id: "errorlens", name: "Error Lens", author: "Alexander", desc: "Inline diagnostics, highlighted", downloads: "6M", rating: 4.8 },
-  { id: "docker", name: "Docker", author: "Microsoft", desc: "Build, manage and deploy containers", downloads: "27M", rating: 4.4 },
-  { id: "vim", name: "Vim Keys", author: "vscodevim", desc: "Vim emulation for the editor", downloads: "6M", rating: 4.2 },
-];
-
 export function ExtensionsPanel() {
   const ide = useIde();
-  const [q, setQ] = useState("");
-  const [installed, setInstalled] = useState<Set<string>>(new Set(["prettier", "eslint"]));
-  const [busy, setBusy] = useState<string | null>(null);
-  const list = EXTENSIONS.filter((e) => (e.name + e.desc + e.author).toLowerCase().includes(q.toLowerCase()));
-  const toggle = (id: string, name: string) => {
-    setBusy(id);
-    setTimeout(() => {
-      setInstalled((s) => {
-        const n = new Set(s);
-        if (n.has(id)) { n.delete(id); ide.log(`Uninstalled ${name}`, "Extensions"); }
-        else { n.add(id); ide.log(`Installed ${name}`, "Extensions"); }
-        return n;
-      });
-      setBusy(null);
-    }, 700);
+  const [query, setQuery] = useState("");
+  const [extensions, setExtensions] = useState<VsxExtension[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [installed, setInstalled] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      fetchData(query);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [query]);
+
+const fetchData = async (q: string) => {
+    setLoading(true);
+    console.log("[Renderer] Searching extensions for query:", q);
+    
+    try {
+      const bridge = (window as any).kilnBridge;
+      if (!bridge) {
+        console.error("[Renderer] window.kilnBridge is UNDEFINED!");
+        setExtensions([]);
+        return;
+      }
+
+      if (!bridge.extensions?.search) {
+        console.error("[Renderer] window.kilnBridge.extensions.search is UNDEFINED!");
+        setExtensions([]);
+        return;
+      }
+
+      const results = await bridge.extensions.search(q);
+      console.log("[Renderer] Received extension results:", results);
+      setExtensions(results || []);
+    } catch (error) {
+      console.error("[Renderer] IPC call failed:", error);
+      setExtensions([]);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const handleInstall = (ext: VsxExtension) => {
+    const key = `${ext.namespace}.${ext.name}`;
+    setInstalled((prev) => ({ ...prev, [key]: true }));
+    toast.success(`Installed extension: ${ext.displayName || ext.name}`);
+    ide.log(`Installed extension: ${ext.displayName || ext.name}`, "Extensions");
+  };
+
   return (
     <div className="flex h-full flex-col">
       <SectionHeader title="Extensions" />
       <div className="px-3 pb-2">
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search extensions in marketplace" className="h-7 w-full rounded border bg-input px-2 text-[13px] outline-none focus:border-primary" />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search extensions in marketplace"
+          className="h-7 w-full rounded border bg-input px-2 text-[13px] outline-none focus:border-primary"
+        />
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
-        {list.map((e) => {
-          const on = installed.has(e.id);
-          return (
-            <div key={e.id} className="flex gap-3 px-3 py-2.5 hover:bg-ide-hover">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/15 font-mono text-base font-semibold text-primary">
-                {e.name.slice(0, 2)}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="truncate text-[13px] font-semibold">{e.name}</span>
-                  <span className="ml-auto flex shrink-0 items-center gap-0.5 text-[11px] text-muted-foreground"><Download className="h-3 w-3" />{e.downloads}</span>
+        {loading ? (
+          <div className="p-4 text-center text-sm text-muted-foreground">Searching marketplace...</div>
+        ) : extensions.length === 0 ? (
+          <EmptyState icon={<Plus className="h-8 w-8" />} title="No extensions found" />
+        ) : (
+          extensions.map((ext) => {
+            const key = `${ext.namespace}.${ext.name}`;
+            const isInstalled = installed[key];
+
+            return (
+              <div key={key} className="flex gap-3 px-3 py-2.5 hover:bg-ide-hover transition-colors">
+                {ext.iconUrl ? (
+                  <img src={ext.iconUrl} alt={ext.name} className="h-10 w-10 shrink-0 rounded object-cover" />
+                ) : (
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/15 font-mono text-base font-semibold text-primary">
+                    <Package className="h-5 w-5" />
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-[13px] font-semibold">{ext.displayName || ext.name}</span>
+                    <span className="ml-auto flex shrink-0 items-center gap-0.5 text-[11px] text-muted-foreground">
+                      <Download className="h-3 w-3" />
+                      {ext.downloadCount?.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="truncate text-[12px] text-muted-foreground">{ext.description || "No description provided."}</div>
+                  <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+                    <span className="truncate">{ext.namespace}</span>
+                    {ext.averageRating && (
+                      <span className="flex items-center gap-0.5">
+                        <Star className="h-3 w-3 fill-ide-warning text-ide-warning" />
+                        {ext.averageRating.toFixed(1)}
+                      </span>
+                    )}
+                    <button
+                      onClick={() => handleInstall(ext)}
+                      disabled={isInstalled}
+                      className={cn(
+                        "ml-auto rounded px-2 py-0.5 text-[11px] font-medium transition-colors",
+                        isInstalled
+                          ? "border bg-transparent text-foreground hover:bg-ide-hover cursor-default"
+                          : "bg-primary text-primary-foreground hover:bg-primary/90"
+                      )}
+                    >
+                      {isInstalled ? "Installed" : "Install"}
+                    </button>
+                  </div>
                 </div>
-                <div className="truncate text-[12px] text-muted-foreground">{e.desc}</div>
-                <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
-                  <span className="truncate">{e.author}</span>
-                  <span className="flex items-center gap-0.5"><Star className="h-3 w-3 fill-ide-warning text-ide-warning" />{e.rating}</span>
-                  <button
-                    onClick={() => toggle(e.id, e.name)}
-                    disabled={busy === e.id}
-                    className={cn("ml-auto rounded px-2 py-0.5 text-[11px] font-medium disabled:opacity-60", on ? "border bg-transparent text-foreground hover:bg-ide-hover" : "bg-primary text-primary-foreground")}
-                  >
-                    {busy === e.id ? "…" : on ? "Uninstall" : "Install"}
-                  </button>
-                </div>
               </div>
-            </div>
-          );
-        })}
-        {!list.length && <EmptyState icon={<Plus className="h-8 w-8" />} title="No extensions found" />}
+            );
+          })
+        )}
       </div>
     </div>
   );

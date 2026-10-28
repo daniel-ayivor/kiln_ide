@@ -36,6 +36,45 @@ var createWindow = () => {
     mainWindow.loadFile(path.join(__dirname, "../dist/index.html"));
   }
 };
+async function searchExtensions(query = "") {
+  try {
+    const url = `https://open-vsx.org/api/-/search?query=${encodeURIComponent(query)}&size=20`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Open VSX API error: ${res.statusText}`);
+    const data = await res.json();
+    if (!data.extensions || data.extensions.length === 0) {
+      return getFallbackExtensions(query);
+    }
+    return data.extensions.map((ext) => ({
+      namespace: ext.namespace,
+      name: ext.name,
+      version: ext.version,
+      displayName: ext.displayName || ext.name,
+      description: ext.description || "No description provided.",
+      iconUrl: ext.files?.icon,
+      downloadCount: ext.downloadCount || 0,
+      averageRating: ext.averageRating,
+      files: ext.files
+    }));
+  } catch (error) {
+    console.warn("Open VSX fetch failed, using fallback extensions:", error);
+    return getFallbackExtensions(query);
+  }
+}
+function getFallbackExtensions(query) {
+  const defaults = [
+    { namespace: "esbenp", name: "prettier-vscode", version: "10.0.0", displayName: "Prettier", description: "Opinionated code formatter", downloadCount: 48e6, averageRating: 4.8, files: {} },
+    { namespace: "dbaeumer", name: "vscode-eslint", version: "2.4.0", displayName: "ESLint", description: "Integrates ESLint into the editor", downloadCount: 32e6, averageRating: 4.6, files: {} },
+    { namespace: "eamodio", name: "gitlens", version: "14.0.0", displayName: "GitLens", description: "Supercharge Git inside your editor", downloadCount: 29e6, averageRating: 4.7, files: {} },
+    { namespace: "bradlc", name: "vscode-tailwindcss", version: "0.10.0", displayName: "Tailwind CSS IntelliSense", description: "Autocomplete and linting for Tailwind CSS", downloadCount: 11e6, averageRating: 4.9, files: {} }
+  ];
+  if (!query.trim()) return defaults;
+  return defaults.filter((e) => {
+    const title = e.displayName ?? e.name;
+    const desc = e.description ?? "";
+    return (title + " " + desc + " " + e.name).toLowerCase().includes(query.toLowerCase());
+  });
+}
 ipcMain.on("kiln:minimize", () => mainWindow?.minimize());
 ipcMain.on("kiln:toggleMaximize", () => {
   if (!mainWindow) return;
@@ -93,6 +132,12 @@ ipcMain.handle("kiln:loadWorkspace", async () => {
 ipcMain.handle("kiln:openNewWindow", () => {
   createWindow();
 });
+ipcMain.handle("kiln:searchExtensions", async (_event, query = "") => {
+  console.log("[Main Process] Received search query:", query);
+  const results = await searchExtensions(query);
+  console.log("[Main Process] Returning results count:", results.length);
+  return results;
+});
 ipcMain.handle("kiln:openFolder", async () => {
   const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
   if (result.canceled || result.filePaths.length === 0) return null;
@@ -140,3 +185,6 @@ app.on("window-all-closed", () => {
     app.quit();
   }
 });
+export {
+  searchExtensions
+};

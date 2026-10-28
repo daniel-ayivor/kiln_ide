@@ -25,6 +25,9 @@ import_electron.contextBridge.exposeInMainWorld("kilnBridge", {
     // Real terminal: runs the command in the main process.
     exec: (input, ctx) => import_electron.ipcRenderer.invoke("kiln:exec", { input, cwd: ctx.cwd })
   },
+  extensions: {
+    search: (query) => import_electron.ipcRenderer.invoke("kiln:searchExtensions", query)
+  },
   window: {
     minimize: () => import_electron.ipcRenderer.send("kiln:minimize"),
     toggleMaximize: () => import_electron.ipcRenderer.send("kiln:toggleMaximize"),
