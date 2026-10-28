@@ -13,10 +13,6 @@ import_electron.contextBridge.exposeInMainWorld("kilnBridge", {
     // Reads one file back from disk (used after an external change event).
     readFile: (id) => import_electron.ipcRenderer.invoke("kiln:readFile", id),
     // Native folder picker.
-    // Returns the path of the selected folder, or null if the user cancelled.
-    // The workbench uses this to open a new workspace.
-    // open new window
-    openNewWindow: () => import_electron.ipcRenderer.invoke("kiln:openNewWindow"),
     openFolder: () => import_electron.ipcRenderer.invoke("kiln:openFolder"),
     // fs.watch notifications from the main process. Returns an unsubscribe fn.
     onFileChange: (cb) => {
@@ -32,6 +28,8 @@ import_electron.contextBridge.exposeInMainWorld("kilnBridge", {
   window: {
     minimize: () => import_electron.ipcRenderer.send("kiln:minimize"),
     toggleMaximize: () => import_electron.ipcRenderer.send("kiln:toggleMaximize"),
-    close: () => import_electron.ipcRenderer.send("kiln:close")
+    close: () => import_electron.ipcRenderer.send("kiln:close"),
+    // Spawns a fresh window instance natively
+    openNewWindow: () => import_electron.ipcRenderer.invoke("kiln:openNewWindow")
   }
 });

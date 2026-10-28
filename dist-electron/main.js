@@ -91,6 +91,9 @@ ipcMain.handle("kiln:loadWorkspace", async () => {
 	startWatching();
 	return nodes;
 });
+ipcMain.handle("kiln:openNewWindow", () => {
+	createWindow();
+});
 ipcMain.handle("kiln:openFolder", async () => {
 	const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
 	if (result.canceled || result.filePaths.length === 0) return null;
