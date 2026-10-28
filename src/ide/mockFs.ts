@@ -153,6 +153,9 @@ export function createMockFs(): Record<string, FsNode> {
 }
 
 export function languageFor(name: string): string {
+  // Handle extension detail views or non-file tabs
+  if (name.startsWith("extension:")) return "json";
+
   const ext = name.split(".").pop()?.toLowerCase();
   switch (ext) {
     case "ts":
@@ -175,6 +178,8 @@ export function languageFor(name: string): string {
 }
 
 export function fileColorClass(name: string): string {
+  if (name.startsWith("extension:")) return "text-primary";
+
   const ext = name.split(".").pop()?.toLowerCase();
   if (ext === "ts" || ext === "tsx" || ext === "js" || ext === "jsx") return "text-file-ts";
   if (ext === "css") return "text-file-css";

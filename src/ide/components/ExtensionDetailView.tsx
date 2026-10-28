@@ -1,27 +1,66 @@
-import React, { useState } from "react";
-// import { VsxExtension } from "./Panels";
-import { Download, Star, ShieldCheck, Package, ExternalLink, Check } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { VsxExtension } from "./SidePanels";
+import { Download, Star, ShieldCheck, Package, ExternalLink, Check, Loader2, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { VsxExtension } from "./SidePanels";
 
 interface ExtensionDetailViewProps {
-  extension?: VsxExtension; // Make optional to prevent undefined crashes
+  extension?: VsxExtension;
+  installState?: "idle" | "installing" | "installed";
   onInstall?: (ext: VsxExtension) => void;
-  isInstalled?: boolean;
+  onUninstall?: (ext: VsxExtension) => void;
 }
 
-export function ExtensionDetailView({ extension, onInstall, isInstalled }: ExtensionDetailViewProps) {
+export function ExtensionDetailView({
+  extension,
+  onInstall,
+  onUninstall,
+}: {
+  extension?: VsxExtension;
+  onInstall?: (ext: VsxExtension) => void;
+  onUninstall?: (ext: VsxExtension) => void;
+}) {
   const [activeTab, setActiveTab] = useState<"overview" | "metadata">("overview");
+  const [, setTick] = useState(0);
 
-  // Safeguard: If extension data hasn't loaded yet, show a clean loading state instead of crashing
+  // Subscribe to installation state changes
+  useEffect(() => {
+    const handleStateChange = () => setTick((t) => t + 1);
+    window.addEventListener("kiln-install-state-changed", handleStateChange);
+    return () => window.removeEventListener("kiln-install-state-changed", handleStateChange);
+  }, []);
+
   if (!extension) {
     return (
       <div className="flex h-full w-full items-center justify-center bg-background p-6 text-sm text-muted-foreground">
+        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
         Loading extension details...
       </div>
     );
   }
+
+  const extKey = `${extension.namespace}.${extension.name}`;
+  const currentState: "idle" | "installing" | "installed" =
+    (window as any).__kilnInstallStates?.[extKey] || "idle";
+
+  const isInstalling = currentState === "installing";
+  const isInstalled = currentState === "installed";
+
+  const handleInstallClick = () => {
+    if (onInstall) {
+      onInstall(extension);
+    } else if ((window as any).__kilnHandleInstall) {
+      (window as any).__kilnHandleInstall(extension);
+    }
+  };
+
+  const handleUninstallClick = () => {
+    if (onUninstall) {
+      onUninstall(extension);
+    } else if ((window as any).__kilnHandleUninstall) {
+      (window as any).__kilnHandleUninstall(extension);
+    }
+  };
 
   return (
     <div className="flex h-full w-full flex-col overflow-y-auto bg-background p-6 text-foreground">
@@ -66,21 +105,33 @@ export function ExtensionDetailView({ extension, onInstall, isInstalled }: Exten
           </div>
 
           <div className="mt-4 flex gap-3">
-            <button
-              onClick={() => {
-                onInstall?.(extension);
-                toast.success(`Installed ${extension.displayName || extension.name}`);
-              }}
-              disabled={isInstalled}
-              className={cn(
-                "flex h-8 items-center gap-2 rounded px-4 text-xs font-medium transition-colors",
-                isInstalled
-                  ? "border bg-muted text-muted-foreground cursor-default"
-                  : "bg-primary text-primary-foreground hover:bg-primary/90"
-              )}
-            >
-              {isInstalled ? <><Check className="h-3.5 w-3.5" /> Installed</> : "Install"}
-            </button>
+            {isInstalled ? (
+              <button
+                onClick={handleUninstallClick}
+                className="flex h-8 items-center gap-2 rounded bg-destructive px-4 text-xs font-medium text-destructive-foreground hover:bg-destructive/90 transition-colors"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Uninstall
+              </button>
+            ) : (
+              <button
+                onClick={handleInstallClick}
+                disabled={isInstalling}
+                className={cn(
+                  "flex h-8 items-center gap-2 rounded px-4 text-xs font-medium transition-colors bg-primary text-primary-foreground hover:bg-primary/90",
+                  isInstalling && "opacity-80 cursor-not-allowed"
+                )}
+              >
+                {isInstalling ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Installing...
+                  </>
+                ) : (
+                  "Install"
+                )}
+              </button>
+            )}
 
             <a
               href={`https://open-vsx.org/extension/${extension.namespace}/${extension.name}`}

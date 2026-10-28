@@ -15,6 +15,7 @@ import {
   GitBranch,
   SearchX,
   Package,
+  Loader2,
 } from "lucide-react";
 import { useIde } from "../store";
 import { FileIcon } from "./Explorer";
@@ -264,7 +265,7 @@ export function ExtensionsPanel() {
   const [query, setQuery] = useState("");
   const [extensions, setExtensions] = useState<VsxExtension[]>([]);
   const [loading, setLoading] = useState(false);
-  const [installed, setInstalled] = useState<Record<string, boolean>>({});
+  const [, setTick] = useState(0); // Force re-render on install state changes
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -273,41 +274,82 @@ export function ExtensionsPanel() {
     return () => clearTimeout(handler);
   }, [query]);
 
+  // Subscribe to global installation state updates
+  useEffect(() => {
+    const handleStateChange = () => setTick((t) => t + 1);
+    window.addEventListener("kiln-install-state-changed", handleStateChange);
+    return () => window.removeEventListener("kiln-install-state-changed", handleStateChange);
+  }, []);
+
+  // Ensure global install state store exists
+  if (!(window as any).__kilnInstallStates) {
+    (window as any).__kilnInstallStates = {};
+  }
+
+  const setInstallState = (extKey: string, state: "idle" | "installing" | "installed") => {
+    (window as any).__kilnInstallStates[extKey] = state;
+    window.dispatchEvent(new Event("kiln-install-state-changed"));
+    setTick((t) => t + 1);
+  };
+
   const fetchData = async (q: string) => {
     setLoading(true);
+    console.log("[Renderer] Searching extensions for query:", q);
+    
     try {
       const bridge = (window as any).kilnBridge;
-      if (bridge?.extensions?.search) {
-        const results = await bridge.extensions.search(q);
-        setExtensions(results || []);
+      if (!bridge?.extensions?.search) {
+        console.error("[Renderer] window.kilnBridge.extensions.search is UNDEFINED!");
+        setExtensions([]);
+        return;
       }
+
+      const results = await bridge.extensions.search(q);
+      console.log("[Renderer] Received extension results:", results);
+      setExtensions(results || []);
     } catch (error) {
-      console.error("Error loading extensions:", error);
+      console.error("[Renderer] IPC call failed:", error);
       setExtensions([]);
     } finally {
       setLoading(false);
     }
   };
 
-const handleSelectExtension = (ext: VsxExtension) => {
+  const handleSelectExtension = (ext: VsxExtension) => {
     const extId = `extension:${ext.namespace}.${ext.name}`;
-    
-    // Save extension into a global or store map so EditorArea can find it
+
+    // Cache extension metadata globally for EditorArea / ExtensionDetailView
     if (!(window as any).__kilnExtensions) {
       (window as any).__kilnExtensions = {};
     }
     (window as any).__kilnExtensions[extId] = ext;
+
+    // Register global helpers
+    (window as any).__kilnHandleInstall = handleInstall;
+    (window as any).__kilnHandleUninstall = handleUninstall;
 
     if (ide.openFile) {
       ide.openFile(extId);
     }
   };
 
-  const handleInstall = (ext: VsxExtension) => {
+  const handleInstall = async (ext: VsxExtension) => {
     const key = `${ext.namespace}.${ext.name}`;
-    setInstalled((prev) => ({ ...prev, [key]: true }));
-    toast.success(`Installed extension: ${ext.displayName || ext.name}`);
-    ide.log(`Installed extension: ${ext.displayName || ext.name}`, "Extensions");
+    setInstallState(key, "installing");
+
+    // Simulate installation delay
+    setTimeout(() => {
+      setInstallState(key, "installed");
+      toast.success(`Installed extension: ${ext.displayName || ext.name}`);
+      ide.log(`Installed extension: ${ext.displayName || ext.name}`, "Extensions");
+    }, 1500);
+  };
+
+  const handleUninstall = (ext: VsxExtension) => {
+    const key = `${ext.namespace}.${ext.name}`;
+    setInstallState(key, "idle");
+    toast.info(`Uninstalled extension: ${ext.displayName || ext.name}`);
+    ide.log(`Uninstalled extension: ${ext.displayName || ext.name}`, "Extensions");
   };
 
   return (
@@ -323,13 +365,18 @@ const handleSelectExtension = (ext: VsxExtension) => {
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
         {loading ? (
-          <div className="p-4 text-center text-sm text-muted-foreground">Searching marketplace...</div>
+          <div className="flex items-center justify-center p-4 text-sm text-muted-foreground gap-2">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Searching marketplace...
+          </div>
         ) : extensions.length === 0 ? (
           <EmptyState icon={<Plus className="h-8 w-8" />} title="No extensions found" />
         ) : (
           extensions.map((ext) => {
             const key = `${ext.namespace}.${ext.name}`;
-            const isInstalled = installed[key];
+            const state = (window as any).__kilnInstallStates[key] || "idle";
+            const isInstalling = state === "installing";
+            const isInstalled = state === "installed";
 
             return (
               <div
@@ -361,21 +408,39 @@ const handleSelectExtension = (ext: VsxExtension) => {
                         {ext.averageRating.toFixed(1)}
                       </span>
                     )}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation(); // Prevents opening detail tab when clicking install
-                        handleInstall(ext);
-                      }}
-                      disabled={isInstalled}
-                      className={cn(
-                        "ml-auto rounded px-2 py-0.5 text-[11px] font-medium transition-colors",
-                        isInstalled
-                          ? "border bg-transparent text-foreground hover:bg-ide-hover cursor-default"
-                          : "bg-primary text-primary-foreground hover:bg-primary/90"
-                      )}
-                    >
-                      {isInstalled ? "Installed" : "Install"}
-                    </button>
+
+                    {isInstalled ? (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleUninstall(ext);
+                        }}
+                        className="ml-auto rounded px-2 py-0.5 text-[11px] font-medium transition-colors bg-destructive/10 text-destructive hover:bg-destructive/20"
+                      >
+                        Uninstall
+                      </button>
+                    ) : (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleInstall(ext);
+                        }}
+                        disabled={isInstalling}
+                        className={cn(
+                          "ml-auto flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium transition-colors bg-primary text-primary-foreground hover:bg-primary/90",
+                          isInstalling && "opacity-80"
+                        )}
+                      >
+                        {isInstalling ? (
+                          <>
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            Installing...
+                          </>
+                        ) : (
+                          "Install"
+                        )}
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

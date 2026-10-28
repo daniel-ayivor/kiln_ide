@@ -4,7 +4,7 @@
   "sideEffects": false,
   "type": "module",
   "main": "dist-electron/main.mjs",
-"scripts": {
+  "scripts": {
     "dev": "concurrently \"npm run dev:vite\" \"npm run dev:electron\"",
     "dev:vite": "vite dev --port 8082 --strictPort",
     "dev:electron": "wait-on http-get://localhost:8082 && npm run build:electron && electron .",
@@ -15,6 +15,7 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write .",
+    "postinstall": "electron-rebuild",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -75,6 +76,7 @@
     "lucide-react": "^1.53.0",
     "motion": "^14.0.0",
     "nanoid": "^6.0.2",
+    "node-pty": "^1.1.0",
     "react": "^19.2.0",
     "react-day-picker": "^9.14.0",
     "react-dom": "^19.2.0",
@@ -92,6 +94,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@electron/rebuild": "^3.7.2",
     "@eslint/js": "^9.32.0",
     "@lovable.dev/vite-tanstack-config": "2.26.5",
     "@testing-library/jest-dom": "^6.6.0",

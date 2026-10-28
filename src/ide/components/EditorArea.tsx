@@ -370,10 +370,10 @@ function GroupView({ group, gi }: { group: EditorGroup; gi: number }) {
 
   const activeTab = group.active;
   const isExtensionTab = activeTab?.startsWith("extension:");
-  
+
   // Safely check that activeTab is a string before indexing
   const extensionData = (isExtensionTab && activeTab)
-    ? (window as any).__kilnExtensions?.[activeTab] || (ide as any).selectedExtensionData 
+    ? (window as any).__kilnExtensions?.[activeTab] || (ide as any).selectedExtensionData
     : null;
 
   return (
@@ -389,10 +389,7 @@ function GroupView({ group, gi }: { group: EditorGroup; gi: number }) {
         ) : activeTab === SETTINGS_TAB ? (
           <SettingsView />
         ) : isExtensionTab ? (
-          <ExtensionDetailView
-            extension={extensionData}
-            isInstalled={false}
-          />
+         <ExtensionDetailView extension={extensionData} />
         ) : ide.nodes[activeTab] ? (
           <CodeEditor key={activeTab} id={activeTab} gi={gi} />
         ) : (

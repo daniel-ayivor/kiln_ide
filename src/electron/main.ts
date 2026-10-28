@@ -5,6 +5,25 @@ import { watch, type FSWatcher } from 'fs';
 import { exec as execCb } from 'child_process';
 import { fileURLToPath } from 'url';
 import * as fsSync from 'fs';
+import * as pty from "node-pty";
+import * as os from "os";
+
+
+// Determine the correct shell based on OS
+const shell = os.platform() === "win32" 
+  ? "powershell.exe" // Use PowerShell on Windows for robust command handling
+  : process.env.SHELL || "bash";
+
+// Define your workspace root (or project directory)
+const workspaceDir = process.cwd(); // Or your opened project path
+
+const ptyProcess = pty.spawn(shell, [], {
+  name: "xterm-color",
+  cols: 80,
+  rows: 30,
+  cwd: workspaceDir, // <-- Ensures it starts in the right folder
+  env: process.env as { [key: string]: string },
+});
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -54,6 +73,8 @@ type VsxExtension = {
   averageRating?: number;
   files: any;
 };
+
+
 
 export async function searchExtensions(query: string = ""): Promise<VsxExtension[]> {
   try {
@@ -177,6 +198,15 @@ ipcMain.handle('kiln:openNewWindow', () => {
   createWindow();
 });
 
+
+// Example backend IPC listener
+ipcMain.handle("terminal-write", (event, data) => {
+  ptyProcess.write(data);
+});
+
+ptyProcess.onData((data:any) => {
+  mainWindow?.webContents.send("terminal-incoming-data", data);
+});
 
 // --- Open VSX Extensions Search Handler ---
 ipcMain.handle('kiln:searchExtensions', async (_event, query: string = "") => {
