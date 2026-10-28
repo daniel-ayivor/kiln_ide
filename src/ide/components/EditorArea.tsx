@@ -7,6 +7,7 @@ import { languageFor, pathOf } from "../mockFs";
 import { SETTINGS_TAB, type EditorGroup, type Problem } from "../types";
 import { FileIcon } from "./Explorer";
 import { SettingsView } from "./SettingsView";
+import { ExtensionDetailView } from "./ExtensionDetailView"; // Import your detail view
 import { Kbd } from "./common";
 import { cn } from "@/lib/utils";
 
@@ -105,7 +106,7 @@ function defineThemes(monaco: Monaco) {
 
 function Breadcrumbs({ id }: { id: string }) {
   const ide = useIde();
-  if (id === SETTINGS_TAB) return null;
+  if (id === SETTINGS_TAB || id.startsWith("extension:")) return null;
   const parts = pathOf(ide.nodes, id);
   return (
     <div className="flex h-6 shrink-0 items-center gap-0.5 overflow-hidden border-b bg-background px-3 text-[12px] text-muted-foreground">
@@ -132,7 +133,8 @@ function Tabs({ group, gi }: { group: EditorGroup; gi: number }) {
       <div className="flex min-w-0 flex-1 overflow-x-auto [scrollbar-width:none]">
         {group.tabs.map((t) => {
           const isSettings = t === SETTINGS_TAB;
-          const name = isSettings ? "Settings" : (ide.nodes[t]?.name ?? t);
+          const isExtension = t.startsWith("extension:");
+          const name = isSettings ? "Settings" : isExtension ? t.replace("extension:", "").split(".").pop() ?? t : (ide.nodes[t]?.name ?? t);
           const active = group.active === t;
           const dirty = ide.dirty.has(t);
           return (
@@ -281,7 +283,6 @@ function CodeEditor({ id, gi }: { id: string; gi: number }) {
             severity: m.severity >= 8 ? "error" : m.severity >= 4 ? "warning" : "info",
           });
         }
-        // custom TODO/FIXME hints
         for (const n of Object.values(ideRef.current.nodes)) {
           (n.content ?? "").split("\n").forEach((l, i) => {
             const mm = l.match(/(TODO|FIXME):?\s*(.*)/);
@@ -364,23 +365,36 @@ function Welcome() {
     </div>
   );
 }
-
 function GroupView({ group, gi }: { group: EditorGroup; gi: number }) {
   const ide = useIde();
+
+  const activeTab = group.active;
+  const isExtensionTab = activeTab?.startsWith("extension:");
+  
+  // Safely check that activeTab is a string before indexing
+  const extensionData = (isExtensionTab && activeTab)
+    ? (window as any).__kilnExtensions?.[activeTab] || (ide as any).selectedExtensionData 
+    : null;
+
   return (
     <div
       className={cn("flex min-w-0 flex-1 flex-col border-l first:border-l-0")}
       onMouseDown={() => gi !== ide.activeGroup && ide.setActiveGroup(gi)}
     >
       {group.tabs.length > 0 && <Tabs group={group} gi={gi} />}
-      {group.active && <Breadcrumbs id={group.active} />}
+      {activeTab && <Breadcrumbs id={activeTab} />}
       <div className="relative min-h-0 flex-1">
-        {!group.active ? (
+        {!activeTab ? (
           <Welcome />
-        ) : group.active === SETTINGS_TAB ? (
+        ) : activeTab === SETTINGS_TAB ? (
           <SettingsView />
-        ) : ide.nodes[group.active] ? (
-          <CodeEditor key={group.active} id={group.active} gi={gi} />
+        ) : isExtensionTab ? (
+          <ExtensionDetailView
+            extension={extensionData}
+            isInstalled={false}
+          />
+        ) : ide.nodes[activeTab] ? (
+          <CodeEditor key={activeTab} id={activeTab} gi={gi} />
         ) : (
           <div className="p-6 text-muted-foreground">File not found.</div>
         )}

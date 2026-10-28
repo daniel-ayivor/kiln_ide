@@ -256,6 +256,9 @@ export function RunPanel() {
   );
 }
 
+
+
+
 export function ExtensionsPanel() {
   const ide = useIde();
   const [query, setQuery] = useState("");
@@ -270,32 +273,33 @@ export function ExtensionsPanel() {
     return () => clearTimeout(handler);
   }, [query]);
 
-const fetchData = async (q: string) => {
+  const fetchData = async (q: string) => {
     setLoading(true);
-    console.log("[Renderer] Searching extensions for query:", q);
-    
     try {
       const bridge = (window as any).kilnBridge;
-      if (!bridge) {
-        console.error("[Renderer] window.kilnBridge is UNDEFINED!");
-        setExtensions([]);
-        return;
+      if (bridge?.extensions?.search) {
+        const results = await bridge.extensions.search(q);
+        setExtensions(results || []);
       }
-
-      if (!bridge.extensions?.search) {
-        console.error("[Renderer] window.kilnBridge.extensions.search is UNDEFINED!");
-        setExtensions([]);
-        return;
-      }
-
-      const results = await bridge.extensions.search(q);
-      console.log("[Renderer] Received extension results:", results);
-      setExtensions(results || []);
     } catch (error) {
-      console.error("[Renderer] IPC call failed:", error);
+      console.error("Error loading extensions:", error);
       setExtensions([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+const handleSelectExtension = (ext: VsxExtension) => {
+    const extId = `extension:${ext.namespace}.${ext.name}`;
+    
+    // Save extension into a global or store map so EditorArea can find it
+    if (!(window as any).__kilnExtensions) {
+      (window as any).__kilnExtensions = {};
+    }
+    (window as any).__kilnExtensions[extId] = ext;
+
+    if (ide.openFile) {
+      ide.openFile(extId);
     }
   };
 
@@ -328,7 +332,11 @@ const fetchData = async (q: string) => {
             const isInstalled = installed[key];
 
             return (
-              <div key={key} className="flex gap-3 px-3 py-2.5 hover:bg-ide-hover transition-colors">
+              <div
+                key={key}
+                onClick={() => handleSelectExtension(ext)}
+                className="flex cursor-pointer gap-3 px-3 py-2.5 hover:bg-ide-hover transition-colors"
+              >
                 {ext.iconUrl ? (
                   <img src={ext.iconUrl} alt={ext.name} className="h-10 w-10 shrink-0 rounded object-cover" />
                 ) : (
@@ -354,7 +362,10 @@ const fetchData = async (q: string) => {
                       </span>
                     )}
                     <button
-                      onClick={() => handleInstall(ext)}
+                      onClick={(e) => {
+                        e.stopPropagation(); // Prevents opening detail tab when clicking install
+                        handleInstall(ext);
+                      }}
                       disabled={isInstalled}
                       className={cn(
                         "ml-auto rounded px-2 py-0.5 text-[11px] font-medium transition-colors",
