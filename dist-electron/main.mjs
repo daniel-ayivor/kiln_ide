@@ -3,15 +3,35 @@ import { app, BrowserWindow, ipcMain, dialog } from "electron";
 import * as path from "path";
 import * as fs from "fs/promises";
 import { watch } from "fs";
-import { exec as execCb } from "child_process";
 import { fileURLToPath } from "url";
 import * as fsSync from "fs";
+import * as pty from "node-pty";
+import * as os from "os";
 var __filename = fileURLToPath(import.meta.url);
 var __dirname = path.dirname(__filename);
 var workspaceRoot = process.cwd();
 var watcher = null;
 var mainWindow = null;
-var DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL ?? "http://localhost:8082";
+var ptyProcess = null;
+function createPtySession() {
+  if (ptyProcess) return;
+  const shell = os.platform() === "win32" ? "powershell.exe" : process.env.SHELL || "bash";
+  ptyProcess = pty.spawn(shell, [], {
+    name: "xterm-color",
+    cols: 80,
+    rows: 30,
+    cwd: workspaceRoot,
+    env: process.env
+  });
+  ptyProcess.onData((data) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("terminal-incoming-data", data);
+    }
+  });
+  ptyProcess.onExit(() => {
+    ptyProcess = null;
+  });
+}
 var createWindow = () => {
   let preloadPath = path.join(__dirname, "preload.js");
   if (!fsSync.existsSync(preloadPath)) {
@@ -23,18 +43,21 @@ var createWindow = () => {
     height: 800,
     frame: false,
     autoHideMenuBar: true,
+    icon: path.join(__dirname, "../../src/assets/Neon Orange Geometric K Logo.png"),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
       preload: preloadPath
     }
   });
-  if (DEV_SERVER_URL) {
-    mainWindow.loadURL(DEV_SERVER_URL);
-    mainWindow.webContents.on("did-fail-load", () => mainWindow?.loadURL(DEV_SERVER_URL));
+  const devServerUrl = process.env.VITE_DEV_SERVER_URL || "http://localhost:8082";
+  if (!app.isPackaged) {
+    mainWindow.loadURL(devServerUrl);
+    mainWindow.webContents.openDevTools();
   } else {
-    mainWindow.loadFile(path.join(__dirname, "../dist/index.html"));
+    mainWindow.loadFile(path.join(__dirname, "../dist/client/index.html"));
   }
+  createPtySession();
 };
 async function searchExtensions(query = "") {
   try {
@@ -132,6 +155,15 @@ ipcMain.handle("kiln:loadWorkspace", async () => {
 ipcMain.handle("kiln:openNewWindow", () => {
   createWindow();
 });
+ipcMain.on("terminal-write", (_event, data) => {
+  if (!ptyProcess) createPtySession();
+  ptyProcess?.write(data);
+});
+ipcMain.handle("kiln:exec", async (_event, { input }) => {
+  if (!ptyProcess) createPtySession();
+  ptyProcess?.write(input + "\r");
+  return { lines: [] };
+});
 ipcMain.handle("kiln:searchExtensions", async (_event, query = "") => {
   console.log("[Main Process] Received search query:", query);
   const results = await searchExtensions(query);
@@ -142,6 +174,11 @@ ipcMain.handle("kiln:openFolder", async () => {
   const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
   if (result.canceled || result.filePaths.length === 0) return null;
   workspaceRoot = result.filePaths[0];
+  if (ptyProcess) {
+    ptyProcess.kill();
+    ptyProcess = null;
+  }
+  createPtySession();
   return workspaceRoot;
 });
 ipcMain.handle("kiln:readFile", async (_event, filePath) => {
@@ -159,18 +196,6 @@ ipcMain.handle("kiln:saveFile", async (_event, { id, content }) => {
     return { success: false, error: error.message };
   }
 });
-ipcMain.handle("kiln:exec", (_event, { input, cwd }) => {
-  const dir = cwd === "~" || !cwd ? workspaceRoot : cwd;
-  return new Promise((resolve) => {
-    execCb(input, { cwd: dir, timeout: 3e4 }, (error, stdout, stderr) => {
-      const lines = [{ kind: "in", text: input }];
-      if (stdout) stdout.trimEnd().split("\n").forEach((l) => lines.push({ kind: "out", text: l }));
-      if (stderr) stderr.trimEnd().split("\n").forEach((l) => lines.push({ kind: "err", text: l }));
-      if (error && !stderr) lines.push({ kind: "err", text: error.message });
-      resolve({ lines });
-    });
-  });
-});
 app.whenReady().then(() => {
   createWindow();
   app.on("activate", () => {
@@ -181,6 +206,7 @@ app.whenReady().then(() => {
 });
 app.on("window-all-closed", () => {
   watcher?.close();
+  ptyProcess?.kill();
   if (process.platform !== "darwin") {
     app.quit();
   }

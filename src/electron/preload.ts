@@ -34,6 +34,20 @@ contextBridge.exposeInMainWorld('kilnBridge', {
   extensions: {
     search: (query: string) => ipcRenderer.invoke('kiln:searchExtensions', query),
   },
+
+  // Add terminal bridge here:
+  terminal: {
+    write: (data: string) => {
+      ipcRenderer.send("terminal-write", data);
+    },
+    onData: (callback: (data: string) => void) => {
+      const subscription = (_event: any, data: string) => callback(data);
+      ipcRenderer.on("terminal-incoming-data", subscription);
+      return () => {
+        ipcRenderer.removeListener("terminal-incoming-data", subscription);
+      };
+    },
+  },
   
   window: {
     minimize: () => ipcRenderer.send('kiln:minimize'),

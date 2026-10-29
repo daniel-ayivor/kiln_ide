@@ -1,5 +1,6 @@
 {
   "name": "tanstack_start_ts",
+  "version": "0.1.0",
   "private": true,
   "sideEffects": false,
   "type": "module",
@@ -8,16 +9,48 @@
     "dev": "concurrently \"npm run dev:vite\" \"npm run dev:electron\"",
     "dev:vite": "vite dev --port 8082 --strictPort",
     "dev:electron": "wait-on http-get://localhost:8082 && npm run build:electron && electron .",
-    "build:electron": "esbuild src/electron/main.ts --bundle --platform=node --format=esm --external:electron --outfile=dist-electron/main.mjs && esbuild src/electron/preload.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist-electron/preload.js",
+    "build:electron": "esbuild src/electron/main.ts --bundle --platform=node --format=esm --external:electron --external:node-pty --outfile=dist-electron/main.mjs && esbuild src/electron/preload.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist-electron/preload.js",
     "electron": "npm run build:electron && electron .",
-    "build": "vite build",
+    "build": "vite build && npm run build:electron",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
+    "dist": "npm run build && electron-builder",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "postinstall": "electron-rebuild",
     "test": "vitest run",
     "test:watch": "vitest"
+  },
+  "build": {
+    "appId": "com.kiln.ide",
+    "productName": "Kiln",
+    "directories": {
+      "output": "release",
+      "buildResources": "resources"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "package.json",
+      "resources/**/*",
+      "node_modules/node-pty/**/*"
+    ],
+    "asarUnpack": [
+      "node_modules/node-pty/**/*"
+    ],
+    "nodeGypRebuild": false,
+    "npmRebuild": false,
+    "win": {
+      "target": "nsis",
+      "icon": "resources/icon.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "resources/icon.icns"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "resources/icon.png"
+    }
   },
   "overrides": {
     "rolldown": "1.2.1"
@@ -95,6 +128,7 @@
   },
   "devDependencies": {
     "@electron/rebuild": "^3.7.2",
+    "@electron/builder": "^25.1.8",
     "@eslint/js": "^9.32.0",
     "@lovable.dev/vite-tanstack-config": "2.26.5",
     "@testing-library/jest-dom": "^6.6.0",

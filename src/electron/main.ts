@@ -1,29 +1,14 @@
+
+
+
 import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import { watch, type FSWatcher } from 'fs';
-import { exec as execCb } from 'child_process';
 import { fileURLToPath } from 'url';
 import * as fsSync from 'fs';
 import * as pty from "node-pty";
 import * as os from "os";
-
-
-// Determine the correct shell based on OS
-const shell = os.platform() === "win32" 
-  ? "powershell.exe" // Use PowerShell on Windows for robust command handling
-  : process.env.SHELL || "bash";
-
-// Define your workspace root (or project directory)
-const workspaceDir = process.cwd(); // Or your opened project path
-
-const ptyProcess = pty.spawn(shell, [], {
-  name: "xterm-color",
-  cols: 80,
-  rows: 30,
-  cwd: workspaceDir, // <-- Ensures it starts in the right folder
-  env: process.env as { [key: string]: string },
-});
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -31,8 +16,34 @@ const __dirname = path.dirname(__filename);
 let workspaceRoot = process.cwd();
 let watcher: FSWatcher | null = null;
 let mainWindow: BrowserWindow | null = null;
+let ptyProcess: pty.IPty | null = null;
 
-const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:8082';
+// --- Persistent PTY Terminal Session Setup ---
+function createPtySession() {
+  if (ptyProcess) return;
+
+  const shell = os.platform() === "win32" 
+    ? "powershell.exe" 
+    : (process.env.SHELL || "bash");
+
+  ptyProcess = pty.spawn(shell, [], {
+    name: "xterm-color",
+    cols: 80,
+    rows: 30,
+    cwd: workspaceRoot,
+    env: process.env as { [key: string]: string },
+  });
+
+  ptyProcess.onData((data: string) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("terminal-incoming-data", data);
+    }
+  });
+
+  ptyProcess.onExit(() => {
+    ptyProcess = null;
+  });
+}
 
 const createWindow = () => {
   let preloadPath = path.join(__dirname, 'preload.js');
@@ -47,6 +58,7 @@ const createWindow = () => {
     height: 800,
     frame: false,
     autoHideMenuBar: true,
+    icon: path.join(__dirname, '../../src/assets/Neon Orange Geometric K Logo.png'),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -54,12 +66,21 @@ const createWindow = () => {
     },
   });
 
-  if (DEV_SERVER_URL) {
-    mainWindow.loadURL(DEV_SERVER_URL);
-    mainWindow.webContents.on('did-fail-load', () => mainWindow?.loadURL(DEV_SERVER_URL));
+  // Robust check for Dev vs Production
+  const devServerUrl = process.env.VITE_DEV_SERVER_URL || 'http://localhost:8082';
+
+  if (!app.isPackaged) {
+    // In development mode, load from the Vite dev server
+    mainWindow.loadURL(devServerUrl);
+    // Open DevTools automatically during development to catch any frontend errors
+    mainWindow.webContents.openDevTools();
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+    // In production, load the built TanStack Start client bundle
+    mainWindow.loadFile(path.join(__dirname, '../dist/client/index.html'));
   }
+
+  // Initialize live PTY terminal session on window load
+  createPtySession();
 };
 
 type VsxExtension = {
@@ -73,8 +94,6 @@ type VsxExtension = {
   averageRating?: number;
   files: any;
 };
-
-
 
 export async function searchExtensions(query: string = ""): Promise<VsxExtension[]> {
   try {
@@ -120,11 +139,6 @@ function getFallbackExtensions(query: string): VsxExtension[] {
     return (title + " " + desc + " " + e.name).toLowerCase().includes(query.toLowerCase());
   });
 }
-
-
-
-
-
 
 // --- Window controls (frameless window) ---
 ipcMain.on('kiln:minimize', () => mainWindow?.minimize());
@@ -198,14 +212,16 @@ ipcMain.handle('kiln:openNewWindow', () => {
   createWindow();
 });
 
-
-// Example backend IPC listener
-ipcMain.handle("terminal-write", (event, data) => {
-  ptyProcess.write(data);
+// --- Terminal IPC Handlers ---
+ipcMain.on("terminal-write", (_event, data) => {
+  if (!ptyProcess) createPtySession();
+  ptyProcess?.write(data);
 });
 
-ptyProcess.onData((data:any) => {
-  mainWindow?.webContents.send("terminal-incoming-data", data);
+ipcMain.handle('kiln:exec', async (_event, { input }) => {
+  if (!ptyProcess) createPtySession();
+  ptyProcess?.write(input + "\r");
+  return { lines: [] };
 });
 
 // --- Open VSX Extensions Search Handler ---
@@ -220,6 +236,13 @@ ipcMain.handle('kiln:openFolder', async () => {
   const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
   if (result.canceled || result.filePaths.length === 0) return null;
   workspaceRoot = result.filePaths[0];
+  
+  if (ptyProcess) {
+    ptyProcess.kill();
+    ptyProcess = null;
+  }
+  createPtySession();
+
   return workspaceRoot;
 });
 
@@ -240,21 +263,6 @@ ipcMain.handle('kiln:saveFile', async (_event, { id, content }: { id: string; co
   }
 });
 
-
-// --- Real terminal ---
-ipcMain.handle('kiln:exec', (_event, { input, cwd }: { input: string; cwd: string }) => {
-  const dir = cwd === '~' || !cwd ? workspaceRoot : cwd;
-  return new Promise((resolve) => {
-    execCb(input, { cwd: dir, timeout: 30_000 }, (error, stdout, stderr) => {
-      const lines: { kind: string; text: string }[] = [{ kind: 'in', text: input }];
-      if (stdout) stdout.trimEnd().split('\n').forEach((l) => lines.push({ kind: 'out', text: l }));
-      if (stderr) stderr.trimEnd().split('\n').forEach((l) => lines.push({ kind: 'err', text: l }));
-      if (error && !stderr) lines.push({ kind: 'err', text: error.message });
-      resolve({ lines });
-    });
-  });
-});
-
 app.whenReady().then(() => {
   createWindow();
 
@@ -267,6 +275,7 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   watcher?.close();
+  ptyProcess?.kill();
   if (process.platform !== 'darwin') {
     app.quit();
   }

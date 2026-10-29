@@ -28,6 +28,19 @@ import_electron.contextBridge.exposeInMainWorld("kilnBridge", {
   extensions: {
     search: (query) => import_electron.ipcRenderer.invoke("kiln:searchExtensions", query)
   },
+  // Add terminal bridge here:
+  terminal: {
+    write: (data) => {
+      import_electron.ipcRenderer.send("terminal-write", data);
+    },
+    onData: (callback) => {
+      const subscription = (_event, data) => callback(data);
+      import_electron.ipcRenderer.on("terminal-incoming-data", subscription);
+      return () => {
+        import_electron.ipcRenderer.removeListener("terminal-incoming-data", subscription);
+      };
+    }
+  },
   window: {
     minimize: () => import_electron.ipcRenderer.send("kiln:minimize"),
     toggleMaximize: () => import_electron.ipcRenderer.send("kiln:toggleMaximize"),
