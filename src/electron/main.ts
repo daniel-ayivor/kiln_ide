@@ -69,7 +69,7 @@ const createWindow = async () => {
   if (!app.isPackaged) {
     // Development: Vite dev server
     mainWindow.loadURL('http://localhost:8082');
-    mainWindow.webContents.openDevTools();
+    // mainWindow.webContents.openDevTools();
   } else {
     // Production: the Vite build output (outDir: "dist") packed inside the app
     const indexPath = path.join(app.getAppPath(), 'dist', 'index.html');
@@ -79,7 +79,7 @@ const createWindow = async () => {
       await mainWindow.loadFile(indexPath);
     }
     // Remove once everything works:
-    mainWindow.webContents.openDevTools();
+    // mainWindow.webContents.openDevTools();
   }
 
   createPtySession();
