@@ -13,6 +13,7 @@ var workspaceRoot = app.isPackaged ? null : process.cwd();
 var watcher = null;
 var mainWindow = null;
 var ptyProcess = null;
+var terminalCwd = workspaceRoot ?? os.homedir();
 function createPtySession() {
   if (ptyProcess) return;
   const shell = os.platform() === "win32" ? "powershell.exe" : process.env.SHELL || "bash";
@@ -223,19 +224,55 @@ ipcMain.on("terminal-write", (_event, data) => {
   if (!ptyProcess) createPtySession();
   ptyProcess?.write(data);
 });
+ipcMain.on("kiln:syncTerminalCwd", (_event, cwd) => {
+  if (cwd && fsSync.existsSync(cwd)) {
+    terminalCwd = cwd;
+  }
+});
+ipcMain.handle("kiln:completePath", async (_event, { partial, dirsOnly }) => {
+  try {
+    const unquoted = partial.replace(/^["']/, "");
+    const endsWithSep = /[\\/]$/.test(unquoted);
+    let searchDir;
+    let prefix;
+    if (!unquoted) {
+      searchDir = terminalCwd;
+      prefix = "";
+    } else if (endsWithSep) {
+      searchDir = path.resolve(terminalCwd, unquoted);
+      prefix = "";
+    } else {
+      const resolved = path.resolve(terminalCwd, unquoted);
+      searchDir = path.dirname(resolved);
+      prefix = path.basename(resolved).toLowerCase();
+    }
+    const entries = await fs.readdir(searchDir, { withFileTypes: true });
+    const matches = entries.filter((e) => {
+      if (dirsOnly && !e.isDirectory()) return false;
+      return e.name.toLowerCase().startsWith(prefix);
+    }).map((e) => {
+      const baseDir = endsWithSep ? unquoted : unquoted.includes("/") || unquoted.includes("\\") ? unquoted.slice(0, Math.max(unquoted.lastIndexOf("/"), unquoted.lastIndexOf("\\")) + 1) : "";
+      const full = `${baseDir}${e.name}${e.isDirectory() ? "\\" : ""}`;
+      return full.includes(" ") ? `"${full}"` : full;
+    }).sort((a, b) => a.localeCompare(b));
+    return matches;
+  } catch {
+    return [];
+  }
+});
 ipcMain.handle("kiln:exec", async (_event, { input }) => {
   if (!ptyProcess) createPtySession();
   ptyProcess?.write(input + "\r");
   return { lines: [] };
 });
 ipcMain.handle("kiln:searchExtensions", async (_event, query = "") => {
-  const results = await searchExtensions(query);
-  return results;
+  return await searchExtensions(query);
 });
 ipcMain.handle("kiln:openFolder", async () => {
   const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
   if (result.canceled || result.filePaths.length === 0) return null;
   workspaceRoot = result.filePaths[0];
+  terminalCwd = workspaceRoot;
   if (ptyProcess) {
     ptyProcess.kill();
     ptyProcess = null;
