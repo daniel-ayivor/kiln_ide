@@ -110,8 +110,25 @@ ipcMain.on("kiln:toggleMaximize", () => {
   else mainWindow.maximize();
 });
 ipcMain.on("kiln:close", () => mainWindow?.close());
-var IGNORED = /* @__PURE__ */ new Set(["node_modules", ".git", "dist", "dist-electron", ".output"]);
-async function buildTree(dirPath, parentId, out) {
+var IGNORED = /* @__PURE__ */ new Set([
+  "node_modules",
+  ".git",
+  "dist",
+  "dist-electron",
+  ".output",
+  ".vite",
+  ".next",
+  ".cache",
+  "coverage"
+]);
+var MAX_PRELOAD_BYTES = 512 * 1024;
+var MAX_TREE_FILES = 3e3;
+function isIgnoredPath(relPath) {
+  const segments = relPath.split(/[\\/]/);
+  return segments.some((seg) => IGNORED.has(seg));
+}
+async function buildTree(dirPath, parentId, out, counter = { files: 0 }) {
+  if (counter.files >= MAX_TREE_FILES) return;
   let entries;
   try {
     entries = await fs.readdir(dirPath, { withFileTypes: true });
@@ -119,6 +136,7 @@ async function buildTree(dirPath, parentId, out) {
     return;
   }
   for (const entry of entries) {
+    if (counter.files >= MAX_TREE_FILES) break;
     if (IGNORED.has(entry.name)) continue;
     const absolutePath = path.join(dirPath, entry.name);
     const isDirectory = entry.isDirectory();
@@ -129,45 +147,74 @@ async function buildTree(dirPath, parentId, out) {
       parentId
     };
     if (!isDirectory) {
+      counter.files++;
       try {
-        node.content = await fs.readFile(absolutePath, "utf-8");
+        const stat2 = await fs.stat(absolutePath);
+        if (stat2.size <= MAX_PRELOAD_BYTES) {
+          node.content = await fs.readFile(absolutePath, "utf-8");
+        } else {
+          node.content = "";
+        }
       } catch {
         node.content = "";
       }
     }
     out[absolutePath] = node;
-    if (isDirectory) await buildTree(absolutePath, absolutePath, out);
+    if (isDirectory) await buildTree(absolutePath, absolutePath, out, counter);
   }
 }
+var pendingWatchTimers = /* @__PURE__ */ new Map();
 function startWatching() {
   watcher?.close();
   watcher = null;
+  for (const t of pendingWatchTimers.values()) clearTimeout(t);
+  pendingWatchTimers.clear();
   const root = workspaceRoot;
   if (!root) return;
   try {
     watcher = watch(root, { recursive: true }, (eventType, filename) => {
       if (!filename || !mainWindow || mainWindow.isDestroyed()) return;
+      if (isIgnoredPath(filename)) return;
       const id = path.join(root, filename);
-      mainWindow.webContents.send("kiln:fileChanged", {
+      const existing = pendingWatchTimers.get(id);
+      if (existing) clearTimeout(existing);
+      pendingWatchTimers.set(
         id,
-        kind: eventType === "rename" ? "created" : "changed"
-      });
+        setTimeout(() => {
+          pendingWatchTimers.delete(id);
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send("kiln:fileChanged", {
+              id,
+              kind: eventType === "rename" ? "created" : "changed"
+            });
+          }
+        }, 250)
+      );
     });
   } catch {
   }
 }
+var activeLoadPromise = null;
 ipcMain.handle("kiln:loadWorkspace", async () => {
   if (!workspaceRoot) {
     return {
       root: { id: "root", name: "No folder open", type: "folder", parentId: null }
     };
   }
-  const nodes = {
-    root: { id: "root", name: path.basename(workspaceRoot), type: "folder", parentId: null }
-  };
-  await buildTree(workspaceRoot, "root", nodes);
-  startWatching();
-  return nodes;
+  if (activeLoadPromise) return activeLoadPromise;
+  activeLoadPromise = (async () => {
+    try {
+      const nodes = {
+        root: { id: "root", name: path.basename(workspaceRoot), type: "folder", parentId: null }
+      };
+      await buildTree(workspaceRoot, "root", nodes);
+      startWatching();
+      return nodes;
+    } finally {
+      activeLoadPromise = null;
+    }
+  })();
+  return activeLoadPromise;
 });
 ipcMain.handle("kiln:openNewWindow", async () => {
   await createWindow();
@@ -182,9 +229,7 @@ ipcMain.handle("kiln:exec", async (_event, { input }) => {
   return { lines: [] };
 });
 ipcMain.handle("kiln:searchExtensions", async (_event, query = "") => {
-  console.log("[Main Process] Received search query:", query);
   const results = await searchExtensions(query);
-  console.log("[Main Process] Returning results count:", results.length);
   return results;
 });
 ipcMain.handle("kiln:openFolder", async () => {
