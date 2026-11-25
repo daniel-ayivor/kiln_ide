@@ -1,12 +1,15 @@
 import { useEffect, useRef } from "react";
 import { setActiveEditor, askAboutSelection } from "../editorBridge";
 import Editor, { type Monaco, type OnMount } from "@monaco-editor/react";
-import { X, Columns2, MoreHorizontal, ChevronRight, Settings as SettingsIcon, Loader2 } from "lucide-react";
+import { X, Columns2, MoreHorizontal, ChevronRight, Settings as SettingsIcon, User, RefreshCw, Loader2 } from "lucide-react";
 import { useIde } from "../store";
 import { languageFor, pathOf } from "../mockFs";
-import { SETTINGS_TAB, type EditorGroup, type Problem } from "../types";
+import { PROFILE_TAB, SETTINGS_TAB, SYNC_TAB, UPDATES_TAB, type EditorGroup, type Problem } from "../types";
 import { FileIcon } from "./Explorer";
 import { SettingsView } from "./SettingsView";
+import { ProfilePage } from "./ProfilePage";
+import { UpdatesPage } from "./UpdatesPage";
+import { SettingsSyncPage } from "./SettingsSyncPage";
 import { ExtensionDetailView } from "./ExtensionDetailView"; // Import your detail view
 import { Kbd } from "./common";
 import { cn } from "@/lib/utils";
@@ -106,7 +109,7 @@ function defineThemes(monaco: Monaco) {
 
 function Breadcrumbs({ id }: { id: string }) {
   const ide = useIde();
-  if (id === SETTINGS_TAB || id.startsWith("extension:")) return null;
+  if (id === SETTINGS_TAB || id === PROFILE_TAB || id === SYNC_TAB || id.startsWith("extension:")) return null;
   const parts = pathOf(ide.nodes, id);
   return (
     <div className="flex h-6 shrink-0 items-center gap-0.5 overflow-hidden border-b bg-background px-3 text-[12px] text-muted-foreground">
@@ -133,8 +136,21 @@ function Tabs({ group, gi }: { group: EditorGroup; gi: number }) {
       <div className="flex min-w-0 flex-1 overflow-x-auto [scrollbar-width:none]">
         {group.tabs.map((t) => {
           const isSettings = t === SETTINGS_TAB;
+          const isUpdates = t === UPDATES_TAB;
+          const isProfile = t === PROFILE_TAB;
+          const isSync = t === SYNC_TAB;
           const isExtension = t.startsWith("extension:");
-          const name = isSettings ? "Settings" : isExtension ? t.replace("extension:", "").split(".").pop() ?? t : (ide.nodes[t]?.name ?? t);
+          const name = isSettings
+            ? "Settings"
+            : isProfile
+              ? "Profile"
+              : isSync
+                ? "Settings Sync"
+                : isUpdates
+                  ? "Updates"
+                  : isExtension
+                    ? t.replace("extension:", "").split(".").pop() ?? t
+                    : (ide.nodes[t]?.name ?? t);
           const active = group.active === t;
           const dirty = ide.dirty.has(t);
           return (
@@ -171,10 +187,11 @@ function Tabs({ group, gi }: { group: EditorGroup; gi: number }) {
                     { separator: true },
                     { label: "Copy Path", onClick: () => navigator.clipboard?.writeText(t) },
                     { label: "Split Right", shortcut: "Ctrl+\\", onClick: () => ide.splitRight() },
+                    { label: "Check for Updates", onClick: () => ide.openFile(UPDATES_TAB) },
                   ],
                 });
               }}
-              title={isSettings ? "Settings" : t}
+              title={isSettings ? "Settings" : isProfile ? "Profile" : isSync ? "Settings Sync" : isUpdates ? "Updates" : t}
               className={cn(
                 "group relative flex min-w-0 max-w-[200px] shrink-0 cursor-pointer select-none items-center gap-1.5 border-r pl-3 pr-1.5 text-[13px] text-muted-foreground",
                 active
@@ -183,7 +200,15 @@ function Tabs({ group, gi }: { group: EditorGroup; gi: number }) {
                 active && gi !== ide.activeGroup && "before:bg-muted-foreground/40",
               )}
             >
-              {isSettings ? <SettingsIcon className="h-3.5 w-3.5 shrink-0" /> : <FileIcon name={name} className="h-3.5 w-3.5" />}
+              {isSettings ? (
+                <SettingsIcon className="h-3.5 w-3.5 shrink-0" />
+              ) : isProfile ? (
+                <User className="h-3.5 w-3.5 shrink-0" />
+              ) : isSync ? (
+                <RefreshCw className="h-3.5 w-3.5 shrink-0" />
+              ) : (
+                <FileIcon name={name} className="h-3.5 w-3.5" />
+              )}
               <span className="truncate">{name}</span>
               <button
                 onClick={(e) => {
@@ -365,6 +390,7 @@ function Welcome() {
     </div>
   );
 }
+
 function GroupView({ group, gi }: { group: EditorGroup; gi: number }) {
   const ide = useIde();
 
@@ -388,8 +414,14 @@ function GroupView({ group, gi }: { group: EditorGroup; gi: number }) {
           <Welcome />
         ) : activeTab === SETTINGS_TAB ? (
           <SettingsView />
+        ) : activeTab === PROFILE_TAB ? (
+          <ProfilePage />
+        ) : activeTab === SYNC_TAB ? (
+          <SettingsSyncPage />
+        ) : activeTab === UPDATES_TAB ? (
+          <UpdatesPage />
         ) : isExtensionTab ? (
-         <ExtensionDetailView extension={extensionData} />
+          <ExtensionDetailView extension={extensionData} />
         ) : ide.nodes[activeTab] ? (
           <CodeEditor key={activeTab} id={activeTab} gi={gi} />
         ) : (

@@ -1,6 +1,6 @@
 import { toast } from "sonner";
 import type { Ide } from "./store";
-import { SETTINGS_TAB } from "./types";
+import { SETTINGS_TAB, PROFILE_TAB,SYNC_TAB, UPDATES_TAB } from "./types";
 import { runEditorAction, pasteIntoEditor, askAboutSelection } from "./editorBridge";
 
 export type Command = { id: string; label: string; shortcut?: string; run: () => void | Promise<void>; checked?: boolean; disabled?: boolean };
@@ -10,12 +10,14 @@ export const demo = (what: string) => () => toast(`${what}`, { description: "Thi
 export function getCommands(ide: Ide): Command[] {
   const g = ide.groups[ide.activeGroup];
   const ed = (id: string) => () => runEditorAction(id);
-  const hasFile = !!g?.active && g.active !== SETTINGS_TAB;
+  const hasFile = !!g?.active && g.active !== SETTINGS_TAB && g.active !== PROFILE_TAB && g.active !== SYNC_TAB && g.active !== UPDATES_TAB;
   
   const list: Command[] = [
     // File
     { id: "file.new", label: "File: New Text File", shortcut: "Ctrl+N", run: () => ide.createNode(ide.selected ?? "root", "file") },
     { id: "file.newFolder", label: "File: New Folder", run: () => ide.createNode(ide.selected ?? "root", "folder") },
+    { id: "sync.open", label: "Preferences: Open Settings Sync", run: () => ide.openFile(SYNC_TAB) },
+    { id: "help.updates", label: "Help: Check for Updates…", run: () => ide.openFile(UPDATES_TAB) },
     { 
       id: "file.newWindow", 
       label: "File: New Window", 
@@ -95,7 +97,7 @@ export function getCommands(ide: Ide): Command[] {
     { id: "sel.copyDown", label: "Selection: Copy Line Down", shortcut: "Shift+Alt+↓", run: ed("editor.action.copyLinesDownAction") },
     { id: "sel.moveUp", label: "Selection: Move Line Up", shortcut: "Alt+↑", run: ed("editor.action.moveLinesUpAction") },
     { id: "sel.moveDown", label: "Selection: Move Line Down", shortcut: "Alt+↓", run: ed("editor.action.moveLinesDownAction") },
-    { id: "sel.duplicate", label: "Selection: Duplicate Selection", run: ed("editor.action.duplicateSelection") },
+    { id: "sel.duplicate", label: "Selection: Duplicate Selection", shortcut: "Ctrl+D", run: ed("editor.action.duplicateSelection") },
     { id: "sel.cursorAbove", label: "Selection: Add Cursor Above", shortcut: "Ctrl+Alt+↑", run: ed("editor.action.insertCursorAbove") },
     { id: "sel.cursorBelow", label: "Selection: Add Cursor Below", shortcut: "Ctrl+Alt+↓", run: ed("editor.action.insertCursorBelow") },
     { id: "sel.nextOccurrence", label: "Selection: Add Next Occurrence", shortcut: "Ctrl+D", run: ed("editor.action.addSelectionToNextFindMatch") },
@@ -119,6 +121,7 @@ export function getCommands(ide: Ide): Command[] {
     { id: "view.output", label: "View: Show Output", shortcut: "Ctrl+Shift+U", run: () => ide.showPanel("output") },
     { id: "view.debugConsole", label: "View: Show Debug Console", shortcut: "Ctrl+Shift+Y", run: () => ide.showPanel("debug") },
     { id: "settings.open", label: "Preferences: Open Settings", shortcut: "Ctrl+,", run: () => ide.openFile(SETTINGS_TAB) },
+    { id: "editprofile.open", label: "Preferences: Open Profile", run: () => ide.openFile(PROFILE_TAB) },
     { id: "theme.toggle", label: "Preferences: Toggle Light/Dark Theme", run: () => ide.setSettings((s) => {
       const resolved = s.theme === "system" ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light") : s.theme;
       return { ...s, theme: resolved === "dark" ? "light" : "dark" };

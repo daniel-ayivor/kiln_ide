@@ -53,7 +53,6 @@ var createWindow = async () => {
   });
   if (!app.isPackaged) {
     mainWindow.loadURL("http://localhost:8082");
-    mainWindow.webContents.openDevTools();
   } else {
     const indexPath = path.join(app.getAppPath(), "dist", "index.html");
     if (!fsSync.existsSync(indexPath)) {
@@ -62,7 +61,6 @@ ${indexPath}`);
     } else {
       await mainWindow.loadFile(indexPath);
     }
-    mainWindow.webContents.openDevTools();
   }
   createPtySession();
 };

@@ -10,6 +10,9 @@ export type SidebarView = "explorer" | "search" | "scm" | "run" | "extensions";
 export type PanelView = "terminal" | "problems" | "output" | "debug";
 
 export const SETTINGS_TAB = "__settings__";
+export const PROFILE_TAB = "__profile__";
+export const SYNC_TAB = "__sync__";
+export const UPDATES_TAB = "__updates__";
 
 export type EditorGroup = { id: string; tabs: string[]; active: string | null };
 

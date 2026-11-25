@@ -1,7 +1,7 @@
 import { Files, Search, GitBranch, Play, Blocks, Settings, CircleUser, MessageSquare } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useIde } from "../store";
-import { SETTINGS_TAB, type SidebarView } from "../types";
+import { PROFILE_TAB, SETTINGS_TAB, SYNC_TAB, type SidebarView } from "../types";
 import { cn } from "@/lib/utils";
 import { useAccount } from "../auth";
 import { Button } from "@/components/ui/button";
@@ -44,7 +44,7 @@ function Btn({ label, active, onClick, children, badge }: { label: string; activ
 
 export function ActivityBar({ chatOpen, onChat }: { chatOpen: boolean; onChat: () => void }) {
   const ide = useIde();
-  const { user, signIn, signOut, openProfile } = useAccount();
+  const { user, signIn, signOut } = useAccount();
   const run = (id: string) => getCommands(ide).find((c) => c.id === id)?.run();
   const display = user?.name || "";
   const initials = String(display).split(/[\s@]+/).slice(0, 2).map(s => s[0]).join("").toUpperCase();
@@ -64,20 +64,36 @@ export function ActivityBar({ chatOpen, onChat }: { chatOpen: boolean; onChat: (
         ))}
         <Btn label="AI Chat" active={chatOpen} onClick={onChat}><MessageSquare className="h-[21px] w-[21px]" strokeWidth={1.5} /></Btn>
       </div>
-      
+
       <div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" aria-label="Account" className="flex h-11 w-full items-center justify-center text-muted-foreground hover:text-foreground">
-              {user ? <span className="flex size-6 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">{initials}</span> : <CircleUser className="h-[21px] w-[21px]" strokeWidth={1.5} />}
+            <Button
+              variant="ghost"
+              aria-label="Account"
+              className="group relative flex h-11 w-full items-center justify-center px-0 text-muted-foreground hover:bg-ide-hover hover:text-foreground"
+            >
+              {user ? (
+                <span className="relative flex h-7 w-7 shrink-0 aspect-square items-center justify-center rounded-full bg-primary/15 text-[11px] font-semibold tracking-wider text-primary ring-1 ring-primary/40 transition-all group-hover:bg-primary group-hover:text-primary-foreground group-hover:ring-primary">
+                  {initials}
+                  <span
+                    aria-hidden="true"
+                    className="absolute -bottom-0.5 -right-0.5 h-2 w-2 shrink-0 rounded-full bg-emerald-500 ring-2 ring-ide-activity"
+                  />
+                </span>
+              ) : (
+                <CircleUser className="h-[21px] w-[21px]" strokeWidth={1.5} />
+              )}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent side="right" align="end" className="min-w-[230px]">
             {user ? <>
               <DropdownMenuLabel className="text-xs"><div className="font-semibold">{user.name}</div><div className="font-normal text-muted-foreground">{user.email} · {user.role}</div></DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={openProfile}>Edit Profile…</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => toast.success("Settings Sync is on (demo)")}>Backup and Sync Settings…</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => ide.openFile(PROFILE_TAB)}>Edit Profile…</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => ide.openFile(SYNC_TAB)}>
+                Backup and Sync Settings…
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => ide.setChatOpen(true)}>Open AI Chat</DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={signOut}>Sign Out</DropdownMenuItem>
