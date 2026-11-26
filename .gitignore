@@ -3,6 +3,7 @@ dist/
 dist-ssr/
 dist-electron/
 release/
+release*/
 .output/
 .vinxi/
 .tanstack/**
@@ -35,3 +36,7 @@ lerna-debug.log*
 *.njsproj
 *.sln
 *.sw?
+
+.env
+.env.*
+!.env.example

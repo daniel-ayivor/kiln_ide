@@ -1,3 +1,5 @@
+
+
 import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs/promises';
@@ -6,9 +8,22 @@ import { fileURLToPath } from 'url';
 import * as fsSync from 'fs';
 import * as pty from 'node-pty';
 import * as os from 'os';
+import { createOpenAI } from '@ai-sdk/openai';
+import { streamText, convertToModelMessages } from 'ai';
+import { initAutoUpdater } from './updater';   // with the other imports
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Load .env ourselves: `electron --env-file` is not reliably honored.
+// Existing environment variables are not overridden.
+try {
+  const envPath = path.join(app.getAppPath(), '.env');
+  (process as any).loadEnvFile(envPath);
+  console.log('[env] loaded', envPath);
+} catch (e: any) {
+  console.warn('[env] could not load .env:', e?.message);
+}
 
 // Packaged apps start in a system folder (e.g. C:\Windows\system32), so start with no folder open.
 let workspaceRoot: string | null = app.isPackaged ? null : process.cwd();
@@ -79,6 +94,7 @@ const createWindow = async () => {
   }
 
   createPtySession();
+  initAutoUpdater();
 };
 
 type VsxExtension = {
@@ -342,6 +358,151 @@ ipcMain.handle('kiln:completePath', async (_event, { partial, dirsOnly }: { part
     return matches;
   } catch {
     return [];
+  }
+});
+
+// --- AI Chat Configuration & Streaming ---
+const aiConfigPath = path.join(app.getPath('userData'), 'kiln-ai.json');
+
+async function getAiSettings(): Promise<{ apiKey: string; baseURL?: string; model: string }> {
+  const envKey = (
+    process.env.VITE_AI ||
+    process.env.GROQ_API_KEY ||
+    process.env.XAI_API_KEY ||
+    process.env.OPENAI_API_KEY ||
+    ''
+  ).trim();
+
+  const isGroqKey = envKey.startsWith('gsk_') || Boolean(process.env.GROQ_API_KEY);
+  const isXaiKey = !isGroqKey && (envKey.startsWith('xai-') || Boolean(process.env.XAI_API_KEY));
+
+  const envBaseURL =
+    process.env.OPENAI_BASE_URL ||
+    (isGroqKey ? 'https://api.groq.com/openai/v1' : isXaiKey ? 'https://api.x.ai/v1' : undefined);
+
+  const defaultModel = isGroqKey
+    ? 'openai/gpt-oss-120b'
+    : isXaiKey
+      ? 'grok-3-mini'
+      : 'gpt-4o-mini';
+
+  try {
+    const raw = await fs.readFile(aiConfigPath, 'utf-8');
+    const saved = JSON.parse(raw);
+    return {
+      apiKey: (saved.apiKey || envKey).trim(),
+      baseURL: saved.baseURL || envBaseURL,
+      model: saved.model || defaultModel,
+    };
+  } catch {
+    return {
+      apiKey: envKey,
+      baseURL: envBaseURL,
+      model: defaultModel,
+    };
+  }
+}
+
+ipcMain.handle('kiln:getAiConfig', async () => {
+  const cfg = await getAiSettings();
+  return { hasKey: Boolean(cfg.apiKey), baseURL: cfg.baseURL ?? '', model: cfg.model };
+});
+
+ipcMain.handle('kiln:saveAiConfig', async (_event, payload: { apiKey: string; baseURL?: string; model?: string }) => {
+  const current = await getAiSettings();
+  const nextKey = payload.apiKey.trim() || current.apiKey;
+  const fallbackModel = nextKey.startsWith('gsk_')
+    ? 'openai/gpt-oss-120b'
+    : nextKey.startsWith('xai-')
+      ? 'grok-3-mini'
+      : 'gpt-4o-mini';
+
+  const next = {
+    apiKey: nextKey,
+    baseURL: payload.baseURL?.trim() || undefined,
+    model: payload.model?.trim() || current.model || fallbackModel,
+  };
+  await fs.writeFile(aiConfigPath, JSON.stringify(next, null, 2), 'utf-8');
+  return { hasKey: Boolean(next.apiKey), baseURL: next.baseURL ?? '', model: next.model };
+});
+
+const activeAiStreams = new Map<string, AbortController>();
+
+ipcMain.on('kiln:aiAbort', (_event, streamId: string) => {
+  activeAiStreams.get(streamId)?.abort();
+  activeAiStreams.delete(streamId);
+});
+
+ipcMain.on('kiln:aiChat', async (event, { streamId, messages, snippet }: { streamId: string; messages: any[]; snippet?: any }) => {
+  const abortController = new AbortController();
+  activeAiStreams.set(streamId, abortController);
+
+  try {
+    const cfg = await getAiSettings();
+    const k = (cfg.apiKey || '').trim();
+    console.log('[kiln:aiChat cfg]', {
+      hasKey: Boolean(k),
+      len: k.length,
+      baseURL: cfg.baseURL,
+      model: cfg.model,
+      configPath: aiConfigPath,
+      configExists: fsSync.existsSync(aiConfigPath),
+    });
+
+    if (!k) {
+      event.sender.send(`kiln:aiError:${streamId}`, 'Missing API key. Click the gear icon in Kiln Chat to add your API key.');
+      return;
+    }
+
+    const provider = createOpenAI({
+      apiKey: k,
+      ...(cfg.baseURL ? { baseURL: cfg.baseURL } : {}),
+    });
+
+    const systemPrompt = [
+      'You are Kiln, a concise, expert coding assistant embedded inside the Kiln desktop IDE.',
+      'Provide clear explanations and clean, copy-ready code blocks with language tags.',
+      snippet?.file ? `The user is asking about file "${snippet.file}" (${snippet.language || 'code'}).` : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+
+    const languageModel = cfg.baseURL ? provider.chat(cfg.model) : provider(cfg.model);
+
+    const result = streamText({
+      model: languageModel,
+      system: systemPrompt,
+      messages: await convertToModelMessages(messages),
+      abortSignal: abortController.signal,
+    });
+
+    // Stream AI SDK UIMessage chunks directly back to DefaultChatTransport
+    const response = result.toUIMessageStreamResponse();
+    const reader = response.body?.getReader();
+    if (!reader) {
+      event.sender.send(`kiln:aiEnd:${streamId}`);
+      return;
+    }
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value && !event.sender.isDestroyed()) {
+        event.sender.send(`kiln:aiChunk:${streamId}`, value);
+      }
+    }
+
+    if (!event.sender.isDestroyed()) {
+      event.sender.send(`kiln:aiEnd:${streamId}`);
+    }
+  } catch (err: any) {
+    console.error('[kiln:aiChat error]', err);
+    if (err?.name !== 'AbortError' && !event.sender.isDestroyed()) {
+      const detail = err?.cause?.message ? `${err.message} (${err.cause.message})` : err?.message;
+      event.sender.send(`kiln:aiError:${streamId}`, detail || 'AI request failed.');
+    }
+  } finally {
+    activeAiStreams.delete(streamId);
   }
 });
 
