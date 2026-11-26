@@ -31,13 +31,13 @@
       "buildResources": "resources"
     },
     "publish": [
-      {
-        "provider": "github",
-        "owner": "daniel-ayivor",
-        "repo": "pixel-perfect-replica",
-        "releaseType": "release"
-      }
-    ],
+  {
+    "provider": "github",
+    "owner": "daniel-ayivor",
+    "repo": "kiln_ide",
+    "releaseType": "release"
+  }
+],
     "nsis": {
       "oneClick": true,
       "createDesktopShortcut": "always",
