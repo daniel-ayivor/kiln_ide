@@ -361,8 +361,38 @@ ipcMain.handle('kiln:completePath', async (_event, { partial, dirsOnly }: { part
   }
 });
 
+
 // --- AI Chat Configuration & Streaming ---
 const aiConfigPath = path.join(app.getPath('userData'), 'kiln-ai.json');
+
+// --- Installed Extensions Persistence ---
+const installedExtPath = path.join(app.getPath('userData'), 'kiln-extensions.json');
+
+type InstalledExtensionRecord = {
+  id: string; // `${namespace}.${name}`
+  namespace: string;
+  name: string;
+  version?: string;
+  displayName?: string;
+  description?: string;
+  iconUrl?: string;
+  downloadUrl?: string;
+  installedAt: string;
+};
+
+async function readInstalledExtensions(): Promise<InstalledExtensionRecord[]> {
+  try {
+    const raw = await fs.readFile(installedExtPath, 'utf-8');
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+async function writeInstalledExtensions(list: InstalledExtensionRecord[]): Promise<void> {
+  await fs.writeFile(installedExtPath, JSON.stringify(list, null, 2), 'utf-8');
+}
 
 async function getAiSettings(): Promise<{ apiKey: string; baseURL?: string; model: string }> {
 const envKey = (
@@ -515,6 +545,129 @@ ipcMain.handle('kiln:exec', async (_event, { input }) => {
 ipcMain.handle('kiln:searchExtensions', async (_event, query: string = '') => {
   return await searchExtensions(query);
 });
+
+
+
+ipcMain.handle('kiln:listInstalledExtensions', async () => {
+  return await readInstalledExtensions();
+});
+
+ipcMain.handle(
+  'kiln:installExtension',
+  async (
+    _event,
+    ext: {
+      namespace: string;
+      name: string;
+      version?: string;
+      downloadUrl?: string;
+      displayName?: string;
+      description?: string;
+      iconUrl?: string;
+    },
+  ) => {
+    const id = `${ext.namespace}.${ext.name}`;
+    const current = await readInstalledExtensions();
+
+    let resolvedVersion = ext.version;
+    let resolvedDownloadUrl = ext.downloadUrl;
+    if (!resolvedVersion || !resolvedDownloadUrl) {
+      try {
+        const metaRes = await fetch(`https://open-vsx.org/api/${ext.namespace}/${ext.name}`);
+        if (metaRes.ok) {
+          const meta = await metaRes.json();
+          resolvedVersion = resolvedVersion || meta.version;
+          resolvedDownloadUrl = resolvedDownloadUrl || meta.files?.download;
+        }
+      } catch {
+        // Keep passed values if Open VSX lookup fails
+      }
+    }
+
+    const record: InstalledExtensionRecord = {
+      id,
+      namespace: ext.namespace,
+      name: ext.name,
+      version: resolvedVersion || 'latest',
+      displayName: ext.displayName || ext.name,
+      description: ext.description,
+      iconUrl: ext.iconUrl,
+      downloadUrl: resolvedDownloadUrl,
+      installedAt: new Date().toISOString(),
+    };
+
+    const next = [...current.filter((item) => item.id !== id), record];
+    await writeInstalledExtensions(next);
+    return { success: true, extension: record, extensions: next };
+  },
+);
+
+ipcMain.handle('kiln:uninstallExtension', async (_event, extensionId: string) => {
+  const current = await readInstalledExtensions();
+  const next = current.filter((item) => item.id !== extensionId);
+  await writeInstalledExtensions(next);
+  return { success: true, extensions: next };
+});
+
+ipcMain.handle(
+  'kiln:applyExtensionToFile',
+  async (
+    _event,
+    payload: {
+      extensionId: string;
+      fileId: string;
+      content: string;
+      language?: string;
+    },
+  ) => {
+    const installed = await readInstalledExtensions();
+    const isInstalled = installed.some((item) => item.id === payload.extensionId);
+    if (!isInstalled) {
+      return {
+        success: false,
+        error: `Extension "${payload.extensionId}" is not installed.`,
+        content: payload.content,
+        diagnostics: [],
+      };
+    }
+
+    const normalized = payload.extensionId.toLowerCase();
+    const diagnostics: Array<{ line: number; message: string; severity: 'warning' | 'error' }> = [];
+    let nextContent = payload.content;
+
+    if (normalized === 'esbenp.prettier-vscode') {
+      nextContent = payload.content
+        .split(/\r?\n/)
+        .map((line) => line.replace(/[ \t]+$/g, ''))
+        .join('\n')
+        .replace(/\n*$/, '\n');
+    } else if (normalized === 'dbaeumer.vscode-eslint') {
+      payload.content.split(/\r?\n/).forEach((line, idx) => {
+        if (/\bvar\s+/.test(line)) {
+          diagnostics.push({
+            line: idx + 1,
+            message: 'Unexpected var, use let or const instead.',
+            severity: 'warning',
+          });
+        }
+        if (/\bconsole\.log\(/.test(line)) {
+          diagnostics.push({
+            line: idx + 1,
+            message: 'Unexpected console statement.',
+            severity: 'warning',
+          });
+        }
+      });
+    }
+
+    return {
+      success: true,
+      content: nextContent,
+      diagnostics,
+      applied: nextContent !== payload.content || diagnostics.length > 0,
+    };
+  },
+);
 
 ipcMain.handle('kiln:openFolder', async () => {
   const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });

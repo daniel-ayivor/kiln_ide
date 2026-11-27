@@ -260,12 +260,229 @@ export function RunPanel() {
 
 
 
+// export function ExtensionsPanel() {
+//   const ide = useIde();
+//   const [query, setQuery] = useState("");
+//   const [extensions, setExtensions] = useState<VsxExtension[]>([]);
+//   const [loading, setLoading] = useState(false);
+//   const [, setTick] = useState(0); // Force re-render on install state changes
+
+//   useEffect(() => {
+//     const handler = setTimeout(() => {
+//       fetchData(query);
+//     }, 300);
+//     return () => clearTimeout(handler);
+//   }, [query]);
+
+//   // Subscribe to global installation state updates
+//   useEffect(() => {
+//     const handleStateChange = () => setTick((t) => t + 1);
+//     window.addEventListener("kiln-install-state-changed", handleStateChange);
+//     return () => window.removeEventListener("kiln-install-state-changed", handleStateChange);
+//   }, []);
+
+//   // Ensure global install state store exists
+//   if (!(window as any).__kilnInstallStates) {
+//     (window as any).__kilnInstallStates = {};
+//   }
+
+//   const setInstallState = (extKey: string, state: "idle" | "installing" | "installed") => {
+//     (window as any).__kilnInstallStates[extKey] = state;
+//     window.dispatchEvent(new Event("kiln-install-state-changed"));
+//     setTick((t) => t + 1);
+//   };
+
+//   const fetchData = async (q: string) => {
+//     setLoading(true);
+//     console.log("[Renderer] Searching extensions for query:", q);
+    
+//     try {
+//       const bridge = (window as any).kilnBridge;
+//       if (!bridge?.extensions?.search) {
+//         console.error("[Renderer] window.kilnBridge.extensions.search is UNDEFINED!");
+//         setExtensions([]);
+//         return;
+//       }
+
+//       const results = await bridge.extensions.search(q);
+//       console.log("[Renderer] Received extension results:", results);
+//       setExtensions(results || []);
+//     } catch (error) {
+//       console.error("[Renderer] IPC call failed:", error);
+//       setExtensions([]);
+//     } finally {
+//       setLoading(false);
+//     }
+//   };
+
+//   const handleSelectExtension = (ext: VsxExtension) => {
+//     const extId = `extension:${ext.namespace}.${ext.name}`;
+
+//     // Cache extension metadata globally for EditorArea / ExtensionDetailView
+//     if (!(window as any).__kilnExtensions) {
+//       (window as any).__kilnExtensions = {};
+//     }
+//     (window as any).__kilnExtensions[extId] = ext;
+
+//     // Register global helpers
+//     (window as any).__kilnHandleInstall = handleInstall;
+//     (window as any).__kilnHandleUninstall = handleUninstall;
+
+//     if (ide.openFile) {
+//       ide.openFile(extId);
+//     }
+//   };
+
+//   const handleInstall = async (ext: VsxExtension) => {
+//     const key = `${ext.namespace}.${ext.name}`;
+//     setInstallState(key, "installing");
+
+//     // Simulate installation delay
+//     setTimeout(() => {
+//       setInstallState(key, "installed");
+//       toast.success(`Installed extension: ${ext.displayName || ext.name}`);
+//       ide.log(`Installed extension: ${ext.displayName || ext.name}`, "Extensions");
+//     }, 1500);
+//   };
+
+//   const handleUninstall = (ext: VsxExtension) => {
+//     const key = `${ext.namespace}.${ext.name}`;
+//     setInstallState(key, "idle");
+//     toast.info(`Uninstalled extension: ${ext.displayName || ext.name}`);
+//     ide.log(`Uninstalled extension: ${ext.displayName || ext.name}`, "Extensions");
+//   };
+
+//   return (
+//     <div className="flex h-full flex-col">
+//       <SectionHeader title="Extensions" />
+//       <div className="px-3 pb-2">
+//         <input
+//           value={query}
+//           onChange={(e) => setQuery(e.target.value)}
+//           placeholder="Search extensions in marketplace"
+//           className="h-7 w-full rounded border bg-input px-2 text-[13px] outline-none focus:border-primary"
+//         />
+//       </div>
+//       <div className="min-h-0 flex-1 overflow-auto">
+//         {loading ? (
+//           <div className="flex items-center justify-center p-4 text-sm text-muted-foreground gap-2">
+//             <Loader2 className="h-4 w-4 animate-spin" />
+//             Searching marketplace...
+//           </div>
+//         ) : extensions.length === 0 ? (
+//           <EmptyState icon={<Plus className="h-8 w-8" />} title="No extensions found" />
+//         ) : (
+//           extensions.map((ext) => {
+//             const key = `${ext.namespace}.${ext.name}`;
+//             const state = (window as any).__kilnInstallStates[key] || "idle";
+//             const isInstalling = state === "installing";
+//             const isInstalled = state === "installed";
+
+//             return (
+//               <div
+//                 key={key}
+//                 onClick={() => handleSelectExtension(ext)}
+//                 className="flex cursor-pointer gap-3 px-3 py-2.5 hover:bg-ide-hover transition-colors"
+//               >
+//                 {ext.iconUrl ? (
+//                   <img src={ext.iconUrl} alt={ext.name} className="h-10 w-10 shrink-0 rounded object-cover" />
+//                 ) : (
+//                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/15 font-mono text-base font-semibold text-primary">
+//                     <Package className="h-5 w-5" />
+//                   </div>
+//                 )}
+//                 <div className="min-w-0 flex-1">
+//                   <div className="flex items-center gap-2">
+//                     <span className="truncate text-[13px] font-semibold">{ext.displayName || ext.name}</span>
+//                     <span className="ml-auto flex shrink-0 items-center gap-0.5 text-[11px] text-muted-foreground">
+//                       <Download className="h-3 w-3" />
+//                       {ext.downloadCount?.toLocaleString()}
+//                     </span>
+//                   </div>
+//                   <div className="truncate text-[12px] text-muted-foreground">{ext.description || "No description provided."}</div>
+//                   <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+//                     <span className="truncate">{ext.namespace}</span>
+//                     {ext.averageRating && (
+//                       <span className="flex items-center gap-0.5">
+//                         <Star className="h-3 w-3 fill-ide-warning text-ide-warning" />
+//                         {ext.averageRating.toFixed(1)}
+//                       </span>
+//                     )}
+
+//                     {isInstalled ? (
+//                       <button
+//                         onClick={(e) => {
+//                           e.stopPropagation();
+//                           handleUninstall(ext);
+//                         }}
+//                         className="ml-auto rounded px-2 py-0.5 text-[11px] font-medium transition-colors bg-destructive/10 text-destructive hover:bg-destructive/20"
+//                       >
+//                         Uninstall
+//                       </button>
+//                     ) : (
+//                       <button
+//                         onClick={(e) => {
+//                           e.stopPropagation();
+//                           handleInstall(ext);
+//                         }}
+//                         disabled={isInstalling}
+//                         className={cn(
+//                           "ml-auto flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium transition-colors bg-primary text-primary-foreground hover:bg-primary/90",
+//                           isInstalling && "opacity-80"
+//                         )}
+//                       >
+//                         {isInstalling ? (
+//                           <>
+//                             <Loader2 className="h-3 w-3 animate-spin" />
+//                             Installing...
+//                           </>
+//                         ) : (
+//                           "Install"
+//                         )}
+//                       </button>
+//                     )}
+//                   </div>
+//                 </div>
+//               </div>
+//             );
+//           })
+//         )}
+//       </div>
+//     </div>
+//   );
+// }
+
+
 export function ExtensionsPanel() {
   const ide = useIde();
   const [query, setQuery] = useState("");
   const [extensions, setExtensions] = useState<VsxExtension[]>([]);
   const [loading, setLoading] = useState(false);
   const [, setTick] = useState(0); // Force re-render on install state changes
+
+  // Hydrate persisted installed extensions on mount
+  useEffect(() => {
+    let active = true;
+    const extApi = (window as any).kilnBridge?.extensions;
+    if (!extApi?.listInstalled) return;
+
+    extApi
+      .listInstalled()
+      .then((list: Array<{ id: string }>) => {
+        if (!active || !Array.isArray(list)) return;
+        const states = ((window as any).__kilnInstallStates =
+          (window as any).__kilnInstallStates || {});
+        for (const item of list) {
+          states[item.id] = "installed";
+        }
+        window.dispatchEvent(new Event("kiln-install-state-changed"));
+      })
+      .catch(() => {});
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -281,7 +498,6 @@ export function ExtensionsPanel() {
     return () => window.removeEventListener("kiln-install-state-changed", handleStateChange);
   }, []);
 
-  // Ensure global install state store exists
   if (!(window as any).__kilnInstallStates) {
     (window as any).__kilnInstallStates = {};
   }
@@ -294,18 +510,13 @@ export function ExtensionsPanel() {
 
   const fetchData = async (q: string) => {
     setLoading(true);
-    console.log("[Renderer] Searching extensions for query:", q);
-    
     try {
       const bridge = (window as any).kilnBridge;
       if (!bridge?.extensions?.search) {
-        console.error("[Renderer] window.kilnBridge.extensions.search is UNDEFINED!");
         setExtensions([]);
         return;
       }
-
       const results = await bridge.extensions.search(q);
-      console.log("[Renderer] Received extension results:", results);
       setExtensions(results || []);
     } catch (error) {
       console.error("[Renderer] IPC call failed:", error);
@@ -315,21 +526,42 @@ export function ExtensionsPanel() {
     }
   };
 
-  const handleSelectExtension = (ext: VsxExtension) => {
-    const extId = `extension:${ext.namespace}.${ext.name}`;
+  const applyExtensionToWorkspace = async (extensionId: string) => {
+    const extApi = (window as any).kilnBridge?.extensions;
+    if (!extApi?.applyToFile) return;
 
-    // Cache extension metadata globally for EditorArea / ExtensionDetailView
-    if (!(window as any).__kilnExtensions) {
-      (window as any).__kilnExtensions = {};
+    const files = Object.values(ide.nodes).filter((n) => n.type === "file" && typeof n.content === "string");
+    let modifiedCount = 0;
+    let diagnosticCount = 0;
+
+    for (const file of files) {
+      const extName = file.name.split(".").pop()?.toLowerCase();
+      const res = await extApi.applyToFile({
+        extensionId,
+        fileId: file.id,
+        content: file.content ?? "",
+        language: extName,
+      });
+
+      if (res?.success) {
+        if (typeof res.content === "string" && res.content !== file.content) {
+          ide.updateContent(file.id, res.content);
+          modifiedCount++;
+        }
+        if (Array.isArray(res.diagnostics) && res.diagnostics.length > 0) {
+          diagnosticCount += res.diagnostics.length;
+          for (const d of res.diagnostics) {
+            ide.log(`[${extensionId}] ${file.name}:${d.line} - ${d.message}`, "Extensions");
+          }
+        }
+      }
     }
-    (window as any).__kilnExtensions[extId] = ext;
 
-    // Register global helpers
-    (window as any).__kilnHandleInstall = handleInstall;
-    (window as any).__kilnHandleUninstall = handleUninstall;
-
-    if (ide.openFile) {
-      ide.openFile(extId);
+    if (modifiedCount > 0) {
+      ide.log(`Applied ${extensionId} to ${modifiedCount} file(s)`, "Extensions");
+    }
+    if (diagnosticCount > 0) {
+      toast.info(`${extensionId} reported ${diagnosticCount} issue(s) — check Output logs`);
     }
   };
 
@@ -337,19 +569,61 @@ export function ExtensionsPanel() {
     const key = `${ext.namespace}.${ext.name}`;
     setInstallState(key, "installing");
 
-    // Simulate installation delay
-    setTimeout(() => {
+    try {
+      const extApi = (window as any).kilnBridge?.extensions;
+      if (extApi?.install) {
+        await extApi.install({
+          namespace: ext.namespace,
+          name: ext.name,
+          version: ext.version,
+          displayName: ext.displayName,
+          description: ext.description,
+          iconUrl: ext.iconUrl,
+          downloadUrl: ext.files?.download,
+        });
+      }
+
       setInstallState(key, "installed");
       toast.success(`Installed extension: ${ext.displayName || ext.name}`);
       ide.log(`Installed extension: ${ext.displayName || ext.name}`, "Extensions");
-    }, 1500);
+
+      // Immediately run the installed extension against workspace files
+      await applyExtensionToWorkspace(key);
+    } catch (err: any) {
+      setInstallState(key, "idle");
+      toast.error(err?.message || `Failed to install ${ext.displayName || ext.name}`);
+    }
   };
 
-  const handleUninstall = (ext: VsxExtension) => {
+  const handleUninstall = async (ext: VsxExtension) => {
     const key = `${ext.namespace}.${ext.name}`;
-    setInstallState(key, "idle");
-    toast.info(`Uninstalled extension: ${ext.displayName || ext.name}`);
-    ide.log(`Uninstalled extension: ${ext.displayName || ext.name}`, "Extensions");
+    try {
+      const extApi = (window as any).kilnBridge?.extensions;
+      if (extApi?.uninstall) {
+        await extApi.uninstall(key);
+      }
+      setInstallState(key, "idle");
+      toast.info(`Uninstalled extension: ${ext.displayName || ext.name}`);
+      ide.log(`Uninstalled extension: ${ext.displayName || ext.name}`, "Extensions");
+    } catch (err: any) {
+      toast.error(err?.message || `Failed to uninstall ${ext.displayName || ext.name}`);
+    }
+  };
+
+  const handleSelectExtension = (ext: VsxExtension) => {
+    const extId = `extension:${ext.namespace}.${ext.name}`;
+
+    if (!(window as any).__kilnExtensions) {
+      (window as any).__kilnExtensions = {};
+    }
+    (window as any).__kilnExtensions[extId] = ext;
+
+    (window as any).__kilnHandleInstall = handleInstall;
+    (window as any).__kilnHandleUninstall = handleUninstall;
+
+    if (ide.openFile) {
+      ide.openFile(extId);
+    }
   };
 
   return (
