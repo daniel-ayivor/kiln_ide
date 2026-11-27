@@ -174,10 +174,21 @@ contextBridge.exposeInMainWorld('kilnBridge', {
     exec: (input: string, ctx: { cwd: string }) => ipcRenderer.invoke('kiln:exec', { input, cwd: ctx.cwd }),
   },
 
-  extensions: {
+  // extensions: {
+  //   search: (query: string) => ipcRenderer.invoke('kiln:searchExtensions', query),
+  // },
+extensions: {
     search: (query: string) => ipcRenderer.invoke('kiln:searchExtensions', query),
+    listInstalled: () => ipcRenderer.invoke('kiln:listInstalledExtensions'),
+    install: (ext: { namespace: string; name: string; version?: string; downloadUrl?: string }) =>
+      ipcRenderer.invoke('kiln:installExtension', ext),
+    applyToFile: (payload: {
+      extensionId: string;
+      fileId: string;
+      content: string;
+      language?: string;
+    }) => ipcRenderer.invoke('kiln:applyExtensionToFile', payload),
   },
-
   terminal: {
     write: (data: string) => {
       ipcRenderer.send('terminal-write', data);

@@ -365,8 +365,7 @@ ipcMain.handle('kiln:completePath', async (_event, { partial, dirsOnly }: { part
 const aiConfigPath = path.join(app.getPath('userData'), 'kiln-ai.json');
 
 async function getAiSettings(): Promise<{ apiKey: string; baseURL?: string; model: string }> {
-  const envKey = (
-    process.env.VITE_AI ||
+const envKey = (
     process.env.GROQ_API_KEY ||
     process.env.XAI_API_KEY ||
     process.env.OPENAI_API_KEY ||
